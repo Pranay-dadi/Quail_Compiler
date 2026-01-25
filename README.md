@@ -1,2 +1,2 @@
 # Quail_Compiler
- 
+FOR DEVELOPERS - CLONE REPOSITORY - GO TO build - DO rm rf * - THEN cmake .. - THEN make - THEN ./Quail_Compiler ../test/sample.mc - SAMPLE TEST FILES IN test - THEN out.ll obtained - THEN llc out.ll -filetype=obj -o out.o - THEN clang out.o -o sample_exec - THEN ./sample_exec
