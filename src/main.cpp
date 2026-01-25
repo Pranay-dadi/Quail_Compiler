@@ -23,5 +23,6 @@ int main(int argc, char** argv) {
     CodeGen cg;
     cg.generate(ast.get());
     cg.optimize();
+    cg.dumpToFile("out.ll");
     cg.dump();
 }

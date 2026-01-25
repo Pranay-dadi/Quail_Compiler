@@ -17,6 +17,7 @@ public:
 
     llvm::Value* generate(AST* node);
     void optimize();
+    void dumpToFile(const std::string &filename);
     void dump();
 
 private:

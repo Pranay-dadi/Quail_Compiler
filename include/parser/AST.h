@@ -89,3 +89,7 @@ struct ArrayAccessAST : AST {
         : name(n), index(std::move(idx)) {}
 };
 
+struct ProgramAST : AST {
+    std::vector<std::unique_ptr<FunctionAST>> functions;
+};
+

@@ -4,14 +4,15 @@
 Parser::Parser(const std::vector<Token>& t) : tokens(t), pos(0) {}
 
 std::unique_ptr<AST> Parser::primary() {
+
+    // NUMBER
     if (tokens[pos].type == TokenType::NUMBER)
         return std::make_unique<NumberAST>(std::stoi(tokens[pos++].lexeme));
 
-    if (tokens[pos].type == TokenType::IDENT)
-        return std::make_unique<VariableAST>(tokens[pos++].lexeme);
-
+    // FUNCTION CALL
     if (tokens[pos].type == TokenType::IDENT &&
-    tokens[pos+1].type == TokenType::LPAREN) {
+        tokens[pos + 1].type == TokenType::LPAREN) {
+
         std::string fname = tokens[pos++].lexeme;
         pos++; // (
 
@@ -26,21 +27,23 @@ std::unique_ptr<AST> Parser::primary() {
         call->callee = fname;
         call->args = std::move(args);
         return call;
-    } 
-
-        // int a[10];
-    if (tokens[pos].type == TokenType::INT &&
-        tokens[pos+2].type == TokenType::LBRACE) {
-
-        pos++;
-        std::string name = tokens[pos++].lexeme;
-        pos++; // [
-        int size = std::stoi(tokens[pos++].lexeme);
-        pos++; pos++; // ] ;
-
-        return std::make_unique<ArrayDeclAST>(name, size);
     }
+
+    // VARIABLE
+    if (tokens[pos].type == TokenType::IDENT)
+        return std::make_unique<VariableAST>(tokens[pos++].lexeme);
+
     return nullptr;
+}
+
+std::unique_ptr<AST> Parser::parse() {
+    Logger::log(Stage::PARSER, "Parsing started");
+    auto program = std::make_unique<ProgramAST>();
+
+    while (tokens[pos].type != TokenType::EOF_TOK) {
+        program->functions.push_back(function());
+    }
+    return program;
 }
 
 std::unique_ptr<FunctionAST> Parser::function() {
@@ -85,12 +88,6 @@ std::unique_ptr<AST> Parser::expression() {
     return lhs;
 }
 
-
-std::unique_ptr<AST> Parser::parse() {
-    Logger::log(Stage::PARSER, "Parsing started");
-    return expression();
-}
-
 std::unique_ptr<BlockAST> Parser::block() {
     auto block = std::make_unique<BlockAST>();
     pos++; // consume '{'
@@ -103,6 +100,14 @@ std::unique_ptr<BlockAST> Parser::block() {
 }
 
 std::unique_ptr<AST> Parser::statement() {
+        // Return statement
+    if (tokens[pos].type == TokenType::RETURN) {
+        pos++; // consume 'return'
+        auto expr = expression();
+        pos++; // consume ';'
+        return std::make_unique<ReturnAST>(std::move(expr));
+    }
+
     // Variable declaration
     if (tokens[pos].type == TokenType::INT) {
         pos++;

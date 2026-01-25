@@ -17,12 +17,6 @@ llvm::Value* CodeGen::generate(AST* node) {
     if (auto* n = dynamic_cast<NumberAST*>(node))
         return llvm::ConstantInt::get(context, llvm::APInt(32, n->val));
 
-    if (auto* b = dynamic_cast<BinaryAST*>(node)) {
-        auto L = generate(b->lhs.get());
-        auto R = generate(b->rhs.get());
-        return builder.CreateAdd(L, R, "addtmp");
-    }
-
     if (auto* v = dynamic_cast<VarDeclAST*>(node)) {
         auto alloc = builder.CreateAlloca(
             llvm::Type::getInt32Ty(context), nullptr, v->name);
@@ -122,9 +116,10 @@ llvm::Value* CodeGen::generate(AST* node) {
         }
 
         generate(f->body.get());
-        builder.CreateRet(
-            llvm::ConstantInt::get(context, llvm::APInt(32, 0)));
-
+        if (!bb->getTerminator()) {
+            builder.CreateRet(
+                llvm::ConstantInt::get(context, llvm::APInt(32, 0)));
+        }
         return fn;
     }
 
@@ -147,7 +142,7 @@ llvm::Value* CodeGen::generate(AST* node) {
     }
 
     if (auto *arr = dynamic_cast<ArrayAccessAST *>(node)) {
-        llvm::Value *arrayPtr = namedValues[arr->name];
+        llvm::Value *arrayPtr = symbols.lookup(arr->name);
         llvm::Value *index = generate(arr->index.get());
 
         llvm::Value *zero =
@@ -155,10 +150,12 @@ llvm::Value* CodeGen::generate(AST* node) {
 
         std::vector<llvm::Value *> idxs = {zero, index};
 
-        llvm::Type *elemType =
-            arrayPtr->getType()->getPointerElementType();
+        auto elemPtr = builder.CreateGEP(
+            arrayPtr->getType()->getPointerElementType(),
+            arrayPtr, idxs, "arrayidx");
 
-        return builder.CreateGEP(elemType, arrayPtr, idxs, "arrayidx");
+        return builder.CreateLoad(
+            llvm::Type::getInt32Ty(context), elemPtr);
     }
 
 
@@ -167,11 +164,35 @@ llvm::Value* CodeGen::generate(AST* node) {
         auto R = generate(b->rhs.get());
 
         switch (b->op) {
-            case '<': return builder.CreateICmpSLT(L, R);
-            case '>': return builder.CreateICmpSGT(L, R);
-            case '=': return builder.CreateICmpEQ(L, R);
+            case '+': return builder.CreateAdd(L, R, "addtmp");
+            case '-': return builder.CreateSub(L, R, "subtmp");
+            case '*': return builder.CreateMul(L, R, "multmp");
+            case '/': return builder.CreateSDiv(L, R, "divtmp");
+            case '<': return builder.CreateICmpSLT(L, R, "cmptmp");
+            case '>': return builder.CreateICmpSGT(L, R, "cmptmp");
+            case '=': return builder.CreateICmpEQ(L, R, "cmptmp");
         }
     }
+
+
+    if (auto *p = dynamic_cast<ProgramAST*>(node)) {
+        for (auto &fn : p->functions)
+            generate(fn.get());
+        return nullptr;
+    }
+
+    if (auto* v = dynamic_cast<VariableAST*>(node)) {
+        auto ptr = symbols.lookup(v->name);
+        return builder.CreateLoad(
+            llvm::Type::getInt32Ty(context), ptr, v->name);
+    }
+
+    if (auto* r = dynamic_cast<ReturnAST*>(node)) {
+        auto val = generate(r->expr.get());
+        return builder.CreateRet(val);
+    }
+
+
 
     return nullptr;
 }
@@ -195,6 +216,12 @@ void CodeGen::optimize() {
         PB.buildPerModuleDefaultPipeline(llvm::OptimizationLevel::O2);
 
     MPM.run(*module, MAM);
+}
+
+void CodeGen::dumpToFile(const std::string &filename) {
+    std::error_code EC;
+    llvm::raw_fd_ostream out(filename, EC);
+    module->print(out, nullptr);
 }
 
 void CodeGen::dump() {
