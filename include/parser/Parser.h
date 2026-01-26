@@ -17,6 +17,9 @@ private:
     std::unique_ptr<AST> primary();
     std::unique_ptr<BlockAST> block();
     std::unique_ptr<FunctionAST> function();
+    std::unique_ptr<AST> parseExpression(int minPrec = 0);
+    int getPrecedence(TokenType type);
+
 
 };
 

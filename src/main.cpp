@@ -2,7 +2,6 @@
 #include "parser/Parser.h"
 #include "codegen/CodeGen.h"
 #include <fstream>
-#include "llvm/Config/llvm-config.h"
 
 #if LLVM_ENABLE_ABI_BREAKING_CHECKS
 bool llvm::DisableABIBreakingChecks = false;
@@ -22,7 +21,9 @@ int main(int argc, char** argv) {
 
     CodeGen cg;
     cg.generate(ast.get());
-    cg.optimize();
+    //cg.optimize();
     cg.dumpToFile("out.ll");
     cg.dump();
+    system("lli out.ll");
+
 }

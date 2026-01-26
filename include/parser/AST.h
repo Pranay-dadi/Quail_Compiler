@@ -18,10 +18,8 @@ struct VariableAST : AST {
 };
 
 struct BinaryAST : AST {
-    char op;
+    std::string op;
     std::unique_ptr<AST> lhs, rhs;
-    BinaryAST(char o, std::unique_ptr<AST> l, std::unique_ptr<AST> r)
-        : op(o), lhs(std::move(l)), rhs(std::move(r)) {}
 };
 
 struct ReturnAST : AST {
@@ -92,4 +90,35 @@ struct ArrayAccessAST : AST {
 struct ProgramAST : AST {
     std::vector<std::unique_ptr<FunctionAST>> functions;
 };
+
+struct ForAST : AST {
+    std::unique_ptr<AST> init, cond, inc, body;
+};
+
+struct BreakAST : AST {};
+struct ContinueAST : AST {};
+
+struct LogicalAST : AST {
+    std::string op;
+    std::unique_ptr<AST> lhs, rhs;
+};
+
+struct UnaryAST : AST {
+    std::string op;
+    std::unique_ptr<AST> operand;
+};
+
+struct ArrayAssignAST : AST {
+    std::string name;
+    std::unique_ptr<AST> index;
+    std::unique_ptr<AST> expr;
+
+    ArrayAssignAST(const std::string& n,
+                   std::unique_ptr<AST> idx,
+                   std::unique_ptr<AST> e)
+        : name(n), index(std::move(idx)), expr(std::move(e)) {}
+};
+
+
+
 

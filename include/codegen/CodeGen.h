@@ -17,6 +17,7 @@ public:
 
     llvm::Value* generate(AST* node);
     void optimize();
+    llvm::Value* toBool(llvm::Value* val);
     void dumpToFile(const std::string &filename);
     void dump();
 
@@ -27,4 +28,7 @@ private:
 
     SymbolTable symbols;
     std::unordered_map<std::string, llvm::Value*> namedValues;
+    std::vector<llvm::BasicBlock*> breakStack;
+    std::vector<llvm::BasicBlock*> continueStack;
+
 };

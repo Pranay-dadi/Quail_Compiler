@@ -3,14 +3,17 @@
 
 enum class TokenType {
     INT, FLOAT, RETURN,
-    IF, ELSE, WHILE,
+    IF, ELSE, WHILE,FOR,
     IDENT, NUMBER,
     PLUS, MINUS, MUL, DIV,
-    ASSIGN, EQ, LT, GT,
+    ASSIGN, EQ,NEQ, LT, GT,LE, GE,
+    AND, OR, NOT,
     LPAREN, RPAREN,
     LBRACE, RBRACE,
+    LBRACKET, RBRACKET,
     SEMI, COMMA,
-    EOF_TOK
+    EOF_TOK,
+    BREAK,CONTINUE
 };
 
 struct Token {
