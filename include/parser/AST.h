@@ -118,7 +118,3 @@ struct ArrayAssignAST : AST {
                    std::unique_ptr<AST> e)
         : name(n), index(std::move(idx)), expr(std::move(e)) {}
 };
-
-
-
-
