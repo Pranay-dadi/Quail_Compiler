@@ -4,7 +4,7 @@
 enum class TokenType {
     INT, FLOAT, RETURN,
     IF, ELSE, WHILE,FOR,
-    IDENT, NUMBER,
+    IDENT, NUMBER,FLOAT_VAL,
     PLUS, MINUS, MUL, DIV,
     ASSIGN, EQ,NEQ, LT, GT,LE, GE,
     AND, OR, NOT,

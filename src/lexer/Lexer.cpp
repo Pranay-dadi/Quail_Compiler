@@ -31,10 +31,23 @@ std::vector<Token> Lexer::tokenize() {
 
         if (isdigit(c)) {
             std::string num;
-            while (isdigit(src[pos])) num += src[pos++];
-            tokens.push_back({TokenType::NUMBER, num});
-            continue;
+            bool isFloat = false;
+            while (pos < src.size() && (isdigit(src[pos]) || src[pos] == '.')) {
+                if (src[pos] == '.') {
+                    if (isFloat) break; // Prevent multiple decimal points
+                    isFloat = true;
+                }
+            num += src[pos++];
+            }
+            if (isFloat) 
+                tokens.push_back({TokenType::FLOAT_VAL, num});
+            else 
+                tokens.push_back({TokenType::NUMBER, num});
+        
+            continue; // Skip the global pos++ at the end of the loop
         }
+
+        
 
         switch (c) {
             case '+': tokens.push_back({TokenType::PLUS,"+"}); break;

@@ -1,4 +1,5 @@
-#pragma once
+#ifndef LEXER_H
+#define LEXER_H
 #include "Token.h"
 #include <vector>
 
@@ -10,3 +11,4 @@ private:
     std::string src;
     size_t pos;
 };
+#endif

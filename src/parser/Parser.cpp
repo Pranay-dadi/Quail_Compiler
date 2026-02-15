@@ -23,7 +23,14 @@ int Parser::getPrecedence(TokenType type) {
 }
 
 std::unique_ptr<AST> Parser::primary() {
+    if (pos >= tokens.size()) return nullptr;
     const auto& tok = tokens[pos];
+
+    if (tok.type == TokenType::ASSIGN) {
+        std::cerr << "[DEBUG] Assignment slipped into primary at pos " << pos << "\n";
+        pos++; 
+        return nullptr;
+    }
 
     if (tok.type == TokenType::NUMBER) {
         int val = std::stoi(tok.lexeme);
@@ -118,31 +125,55 @@ std::unique_ptr<AST> Parser::parseExpression(int minPrec) {
 
 std::unique_ptr<BlockAST> Parser::block() {
     auto b = std::make_unique<BlockAST>();
-
-    if (tokens[pos].type != TokenType::LBRACE) {
-        std::cerr << "Expected '{' at pos " << pos << "\n";
-        return b;
-    }
-    pos++; // {
+    if (tokens[pos].type == TokenType::LBRACE) pos++; // {
 
     while (tokens[pos].type != TokenType::RBRACE && tokens[pos].type != TokenType::EOF_TOK) {
-        auto stmt = statement();
-        if (stmt) {
-            b->statements.push_back(std::move(stmt));
-        }
+        // MUST call statement(), NOT expression()
+        auto stmt = statement(); 
+        if (stmt) b->statements.push_back(std::move(stmt));
     }
 
-    if (tokens[pos].type == TokenType::RBRACE) {
-        pos++;
-    } else {
-        std::cerr << "Missing '}' at pos " << pos << "\n";
-    }
+    if (tokens[pos].type == TokenType::RBRACE) pos++; // }
     return b;
 }
 
 std::unique_ptr<AST> Parser::statement() {
     const auto& tok = tokens[pos];
 
+    if (tokens[pos].type == TokenType::IDENT) {
+    if (pos + 1 < tokens.size() && tokens[pos + 1].type == TokenType::ASSIGN) {
+        std::string name = tokens[pos].lexeme;
+        pos += 2; // Move past 'name' and '='
+        
+        auto val = expression(); 
+        
+        if (tokens[pos].type == TokenType::SEMI) pos++;
+        return std::make_unique<AssignAST>(name, std::move(val)); // MUST RETURN HERE
+    }
+}
+
+    // int x;
+    if (tok.type == TokenType::INT || tok.type == TokenType::FLOAT) {
+        pos++; // consume 'int'
+        if (tokens[pos].type != TokenType::IDENT) return nullptr;
+        
+        std::string name = tokens[pos++].lexeme; // consume 'name'
+
+        // Handle Array or Simple Var
+        if (tokens[pos].type == TokenType::LBRACKET) {
+            pos++; // [
+            int size = std::stoi(tokens[pos++].lexeme); 
+            if (tokens[pos].type == TokenType::RBRACKET) pos++;
+            if (tokens[pos].type == TokenType::SEMI) pos++;
+            return std::make_unique<ArrayDeclAST>(name, size);
+        }
+
+        // Standard variable: Just check for ONE semicolon
+        if (tokens[pos].type == TokenType::SEMI) {
+            pos++;
+        }
+        return std::make_unique<VarDeclAST>(name);
+    }
     // return expr;
     if (tok.type == TokenType::RETURN) {
         pos++;
@@ -151,30 +182,9 @@ std::unique_ptr<AST> Parser::statement() {
             expr = expression();
         }
         if (tokens[pos].type == TokenType::SEMI) pos++;
-        else std::cerr << "Expected ';' after return at pos " << pos << "\n";
         return std::make_unique<ReturnAST>(std::move(expr));
     }
 
-    // int x;
-    if (tok.type == TokenType::INT) {
-        pos++;
-        if (tokens[pos].type != TokenType::IDENT) {
-            std::cerr << "Expected identifier after 'int'\n";
-            return nullptr;
-        }
-        std::string name = tokens[pos++].lexeme;
-        if (tokens[pos].type == TokenType::SEMI) pos++;
-        else std::cerr << "Expected ';' after declaration at pos " << pos << "\n";
-        if (tokens[pos].type == TokenType::LBRACKET) {
-            pos++; // [
-            int size = std::stoi(tokens[pos++].lexeme);
-            pos++; // ]
-            pos++; // ;
-            return std::make_unique<ArrayDeclAST>(name, size);
-        }
-        pos++; // ;
-        return std::make_unique<VarDeclAST>(name);
-    }
 
     // if (cond) { ... } else { ... }
     if (tok.type == TokenType::IF) {
@@ -210,7 +220,9 @@ std::unique_ptr<AST> Parser::statement() {
 
     // for (init; cond; inc) { ... }
     if (tok.type == TokenType::FOR) {
+        
         pos++; // for
+        
         if (tokens[pos++].type != TokenType::LPAREN) std::cerr << "Expected '(' after for\n";
 
         std::unique_ptr<AST> init = nullptr;
@@ -223,7 +235,13 @@ std::unique_ptr<AST> Parser::statement() {
         auto cond = expression();
         if (tokens[pos++].type != TokenType::SEMI) std::cerr << "Expected ';' after for cond\n";
 
-        std::unique_ptr<AST> inc = nullptr;
+        auto inc = expression();
+        if (tokens[pos++].type != TokenType::RPAREN) std::cerr << "Expected )\n";
+        
+        auto body = block();
+        return std::make_unique<ForAST>(std::move(init), std::move(cond), std::move(inc), std::move(body));
+
+        /*std::unique_ptr<AST> inc = nullptr;
         if (tokens[pos].type != TokenType::RPAREN) {
             inc = expression();
         }
@@ -236,8 +254,10 @@ std::unique_ptr<AST> Parser::statement() {
         f->cond = std::move(cond);
         f->inc  = std::move(inc);
         f->body = std::move(body);
-        return f;
+        return f;*/
     }
+
+    
 
     // break;
     if (tok.type == TokenType::BREAK) {
@@ -254,7 +274,7 @@ std::unique_ptr<AST> Parser::statement() {
     }
 
     // Assignment / array assignment / expression statement
-    if (tok.type == TokenType::IDENT) {
+    /*if (tok.type == TokenType::IDENT) {
         std::string name = tok.lexeme;
         pos++;
 
@@ -286,25 +306,13 @@ std::unique_ptr<AST> Parser::statement() {
 
         // not assignment → rewind and try expression statement
         pos--;
-    }
+    }*/
+
 
     // Expression statement fallback
-    auto expr = parseExpression(0);
-    if (expr) {
-        if (tokens[pos].type == TokenType::SEMI) {
-            pos++;
-            return expr;
-        } else {
-            std::cerr << "Expected ';' after expression statement at pos " << pos << "\n";
-            pos++; // safety
-        }
-    }
-
-    // Safety net
-    std::cerr << "Could not parse statement at pos " << pos
-              << " token: " << static_cast<int>(tokens[pos].type) << "\n";
-    pos++;
-    return nullptr;
+    auto expr = expression();
+    if (tokens[pos].type == TokenType::SEMI) pos++;
+    return expr;
 }
 
 std::unique_ptr<FunctionAST> Parser::function() {
