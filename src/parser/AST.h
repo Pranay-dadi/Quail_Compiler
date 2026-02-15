@@ -91,8 +91,17 @@ struct IfAST : AST {
         if (elseBlock) {
             std::cout << space << "  Else:\n";
             elseBlock->print(indent + 4);
+        }
     }
-}
+};
+
+struct PostIncAST : AST {
+    std::string name;
+    PostIncAST(std::string n) : name(std::move(n)) {}
+
+    void print(int indent) override {
+        std::cout << std::string(indent, ' ') << "PostIncrement: " << name << "++\n";
+    }
 };
 
 struct WhileAST : AST {
@@ -228,5 +237,3 @@ struct ArrayAssignAST : AST {
 };
 
 #endif
-
-

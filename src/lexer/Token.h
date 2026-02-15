@@ -6,7 +6,7 @@ enum class TokenType {
     IF, ELSE, WHILE,FOR,
     IDENT, NUMBER,FLOAT_VAL,
     PLUS, MINUS, MUL, DIV,
-    ASSIGN, EQ,NEQ, LT, GT,LE, GE,
+    ASSIGN, EQ,NEQ, INC, LT, GT,LE, GE,
     AND, OR, NOT,
     LPAREN, RPAREN,
     LBRACE, RBRACE,

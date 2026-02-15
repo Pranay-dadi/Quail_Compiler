@@ -3,6 +3,15 @@
 #include <cctype>
 
 Lexer::Lexer(const std::string& s) : src(s), pos(0) {}
+char Lexer::peek() const {
+    if (pos + 1 >= src.size()) return '\0';
+    return src[pos + 1];
+}
+
+char Lexer::getChar() {
+    if (pos >= src.size()) return '\0';
+    return src[pos++];
+}
 
 std::vector<Token> Lexer::tokenize() {
     Logger::log(Stage::LEXER, "Starting tokenization");
@@ -15,7 +24,7 @@ std::vector<Token> Lexer::tokenize() {
 
         if (isalpha(c)) {
             std::string id;
-            while (isalnum(src[pos])) id += src[pos++];
+            while (pos < src.size() && isalnum(src[pos])) id += src[pos++];
             if (id == "int") tokens.push_back({TokenType::INT, id});
             else if (id == "float") tokens.push_back({TokenType::FLOAT, id});
             else if (id == "return") tokens.push_back({TokenType::RETURN, id});
@@ -34,30 +43,35 @@ std::vector<Token> Lexer::tokenize() {
             bool isFloat = false;
             while (pos < src.size() && (isdigit(src[pos]) || src[pos] == '.')) {
                 if (src[pos] == '.') {
-                    if (isFloat) break; // Prevent multiple decimal points
+                    if (isFloat) break; 
                     isFloat = true;
                 }
-            num += src[pos++];
+                num += src[pos++];
             }
-            if (isFloat) 
-                tokens.push_back({TokenType::FLOAT_VAL, num});
-            else 
-                tokens.push_back({TokenType::NUMBER, num});
-        
-            continue; // Skip the global pos++ at the end of the loop
+            if (isFloat) tokens.push_back({TokenType::FLOAT_VAL, num});
+            else tokens.push_back({TokenType::NUMBER, num});
+            continue; 
         }
 
-        
-
         switch (c) {
-            case '+': tokens.push_back({TokenType::PLUS,"+"}); break;
+            case '+': 
+                if (peek() == '+') {
+                    getChar(); // consume the first '+'
+                    getChar(); // consume the second '+'
+                    tokens.push_back({TokenType::INC, "++"});
+                    continue; // Skip the global pos++ at the bottom
+                } else {
+                    tokens.push_back({TokenType::PLUS, "+"});
+                }
+                break;
             case '-': tokens.push_back({TokenType::MINUS,"-"}); break;
             case '*': tokens.push_back({TokenType::MUL,"*"}); break;
             case '/': tokens.push_back({TokenType::DIV,"/"}); break;
             case '=':
-                if (src[pos+1] == '=') {
+                if (peek() == '=') {
+                    getChar(); getChar();
                     tokens.push_back({TokenType::EQ, "=="});
-                    pos++;
+                    continue;
                 } else {
                     tokens.push_back({TokenType::ASSIGN, "="});
                 }
@@ -71,33 +85,38 @@ std::vector<Token> Lexer::tokenize() {
             case ']': tokens.push_back({TokenType::RBRACKET, "]"}); break;
             case ',': tokens.push_back({TokenType::COMMA, ","}); break;
             case '&':
-                if (src[pos+1] == '&') {
+                if (peek() == '&') {
+                    getChar(); getChar();
                     tokens.push_back({TokenType::AND, "&&"});
-                    pos++;
+                    continue;
                 }
                 break;
             case '|':
-                if (src[pos+1] == '|') {
+                if (peek() == '|') {
+                    getChar(); getChar();
                     tokens.push_back({TokenType::OR, "||"});
-                    pos++;
+                    continue;
                 }
                 break;
             case '!':
-                if (src[pos+1] == '=') {
+                if (peek() == '=') {
+                    getChar(); getChar();
                     tokens.push_back({TokenType::NEQ, "!="});
-                    pos++;
+                    continue;
                 } else tokens.push_back({TokenType::NOT, "!"});
                 break;
             case '<':
-                if (src[pos+1] == '=') {
+                if (peek() == '=') {
+                    getChar(); getChar();
                     tokens.push_back({TokenType::LE, "<="});
-                    pos++;
+                    continue;
                 } else tokens.push_back({TokenType::LT, "<"});
                 break;
             case '>':
-                if (src[pos+1] == '=') {
+                if (peek() == '=') {
+                    getChar(); getChar();
                     tokens.push_back({TokenType::GE, ">="});
-                    pos++;
+                    continue;
                 } else tokens.push_back({TokenType::GT, ">"});
                 break;
         }

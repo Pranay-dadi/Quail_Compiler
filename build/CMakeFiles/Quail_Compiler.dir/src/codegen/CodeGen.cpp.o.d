@@ -353,6 +353,13 @@ CMakeFiles/Quail_Compiler.dir/src/codegen/CodeGen.cpp.o: \
  /usr/include/c++/11/bits/basic_ios.tcc \
  /usr/include/c++/11/bits/ostream.tcc /usr/include/c++/11/istream \
  /usr/include/c++/11/bits/istream.tcc \
+ /usr/lib/llvm-14/include/llvm/Passes/PassBuilder.h \
+ /usr/lib/llvm-14/include/llvm/Analysis/CGSCCPassManager.h \
+ /usr/lib/llvm-14/include/llvm/ADT/PriorityWorklist.h \
+ /usr/lib/llvm-14/include/llvm/Analysis/LazyCallGraph.h \
+ /usr/lib/llvm-14/include/llvm/ADT/SetVector.h \
+ /usr/lib/llvm-14/include/llvm/Analysis/TargetLibraryInfo.h \
+ /usr/lib/llvm-14/include/llvm/ADT/BitVector.h \
  /usr/lib/llvm-14/include/llvm/IR/PassManager.h \
  /usr/lib/llvm-14/include/llvm/ADT/TinyPtrVector.h \
  /usr/lib/llvm-14/include/llvm/IR/PassInstrumentation.h \
@@ -362,15 +369,7 @@ CMakeFiles/Quail_Compiler.dir/src/codegen/CodeGen.cpp.o: \
  /usr/lib/llvm-14/include/llvm/Support/TimeProfiler.h \
  /usr/lib/llvm-14/include/llvm/Support/TypeName.h \
  /usr/include/c++/11/list /usr/include/c++/11/bits/stl_list.h \
- /usr/include/c++/11/bits/list.tcc \
- /usr/lib/llvm-14/include/llvm/Passes/PassBuilder.h \
- /usr/lib/llvm-14/include/llvm/Analysis/CGSCCPassManager.h \
- /usr/lib/llvm-14/include/llvm/ADT/PriorityWorklist.h \
- /usr/lib/llvm-14/include/llvm/Analysis/LazyCallGraph.h \
- /usr/lib/llvm-14/include/llvm/ADT/SetVector.h \
- /usr/lib/llvm-14/include/llvm/Analysis/TargetLibraryInfo.h \
- /usr/lib/llvm-14/include/llvm/ADT/BitVector.h \
- /usr/lib/llvm-14/include/llvm/Pass.h \
+ /usr/include/c++/11/bits/list.tcc /usr/lib/llvm-14/include/llvm/Pass.h \
  /usr/lib/llvm-14/include/llvm/PassAnalysisSupport.h \
  /usr/lib/llvm-14/include/llvm/PassSupport.h \
  /usr/lib/llvm-14/include/llvm/PassInfo.h \
@@ -435,4 +434,4 @@ CMakeFiles/Quail_Compiler.dir/src/codegen/CodeGen.cpp.o: \
  /usr/lib/llvm-14/include/llvm/Transforms/Utils/ValueMapper.h \
  /usr/lib/llvm-14/include/llvm/IR/ValueMap.h \
  /usr/lib/llvm-14/include/llvm/Support/Mutex.h \
- /usr/lib/llvm-14/include/llvm/Transforms/Scalar/InstSimplifyPass.h
+ /usr/lib/llvm-14/include/llvm/IR/Verifier.h
