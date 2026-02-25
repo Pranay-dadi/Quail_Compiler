@@ -1,8 +1,8 @@
 CMakeFiles/Quail_Compiler.dir/src/parser/Parser.cpp.o: \
- /home/pranaydadi/Documents/Course\ Projects/Quail_Compiler/src/parser/Parser.cpp \
+ /home/pranaydadi/Documents/Quail_Compiler/src/parser/Parser.cpp \
  /usr/include/stdc-predef.h \
- /home/pranaydadi/Documents/Course\ Projects/Quail_Compiler/include/parser/Parser.h \
- /home/pranaydadi/Documents/Course\ Projects/Quail_Compiler/include/lexer/Token.h \
+ /home/pranaydadi/Documents/Quail_Compiler/include/parser/Parser.h \
+ /home/pranaydadi/Documents/Quail_Compiler/include/lexer/Token.h \
  /usr/include/c++/11/string \
  /usr/include/x86_64-linux-gnu/c++/11/bits/c++config.h \
  /usr/include/x86_64-linux-gnu/c++/11/bits/os_defines.h \
@@ -131,7 +131,7 @@ CMakeFiles/Quail_Compiler.dir/src/parser/Parser.cpp.o: \
  /usr/include/x86_64-linux-gnu/bits/types/error_t.h \
  /usr/include/c++/11/bits/charconv.h \
  /usr/include/c++/11/bits/basic_string.tcc \
- /home/pranaydadi/Documents/Course\ Projects/Quail_Compiler/include/parser/AST.h \
+ /home/pranaydadi/Documents/Quail_Compiler/include/parser/AST.h \
  /usr/include/c++/11/memory /usr/include/c++/11/bits/stl_uninitialized.h \
  /usr/include/c++/11/bits/stl_tempbuf.h \
  /usr/include/c++/11/bits/stl_raw_storage_iter.h \
@@ -157,10 +157,9 @@ CMakeFiles/Quail_Compiler.dir/src/parser/Parser.cpp.o: \
  /usr/include/c++/11/pstl/execution_defs.h /usr/include/c++/11/vector \
  /usr/include/c++/11/bits/stl_vector.h \
  /usr/include/c++/11/bits/stl_bvector.h \
- /usr/include/c++/11/bits/vector.tcc \
- /home/pranaydadi/Documents/Course\ Projects/Quail_Compiler/include/utils/Logger.h \
- /usr/include/c++/11/iostream /usr/include/c++/11/ostream \
- /usr/include/c++/11/ios /usr/include/c++/11/bits/ios_base.h \
+ /usr/include/c++/11/bits/vector.tcc /usr/include/c++/11/iostream \
+ /usr/include/c++/11/ostream /usr/include/c++/11/ios \
+ /usr/include/c++/11/bits/ios_base.h \
  /usr/include/c++/11/bits/locale_classes.h \
  /usr/include/c++/11/bits/locale_classes.tcc \
  /usr/include/c++/11/system_error \
@@ -176,4 +175,5 @@ CMakeFiles/Quail_Compiler.dir/src/parser/Parser.cpp.o: \
  /usr/include/c++/11/bits/locale_facets.tcc \
  /usr/include/c++/11/bits/basic_ios.tcc \
  /usr/include/c++/11/bits/ostream.tcc /usr/include/c++/11/istream \
- /usr/include/c++/11/bits/istream.tcc
+ /usr/include/c++/11/bits/istream.tcc /usr/include/c++/11/sstream \
+ /usr/include/c++/11/bits/sstream.tcc

@@ -57,10 +57,10 @@ RM = /usr/bin/cmake -E rm -f
 EQUALS = =
 
 # The top-level source directory on which CMake was run.
-CMAKE_SOURCE_DIR = "/home/pranaydadi/Documents/Course Projects/Quail_Compiler"
+CMAKE_SOURCE_DIR = /home/pranaydadi/Documents/Quail_Compiler
 
 # The top-level build directory on which CMake was run.
-CMAKE_BINARY_DIR = "/home/pranaydadi/Documents/Course Projects/Quail_Compiler/build"
+CMAKE_BINARY_DIR = /home/pranaydadi/Documents/Quail_Compiler/build
 
 #=============================================================================
 # Targets provided globally by CMake.
@@ -87,9 +87,9 @@ rebuild_cache/fast: rebuild_cache
 
 # The main all target
 all: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/home/pranaydadi/Documents/Course Projects/Quail_Compiler/build/CMakeFiles" "/home/pranaydadi/Documents/Course Projects/Quail_Compiler/build//CMakeFiles/progress.marks"
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/pranaydadi/Documents/Quail_Compiler/build/CMakeFiles /home/pranaydadi/Documents/Quail_Compiler/build//CMakeFiles/progress.marks
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 all
-	$(CMAKE_COMMAND) -E cmake_progress_start "/home/pranaydadi/Documents/Course Projects/Quail_Compiler/build/CMakeFiles" 0
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/pranaydadi/Documents/Quail_Compiler/build/CMakeFiles 0
 .PHONY : all
 
 # The main clean target
@@ -167,6 +167,30 @@ Quail_Compiler: cmake_check_build_system
 Quail_Compiler/fast:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Quail_Compiler.dir/build.make CMakeFiles/Quail_Compiler.dir/build
 .PHONY : Quail_Compiler/fast
+
+src/autocorrect/AutoCorrector.o: src/autocorrect/AutoCorrector.cpp.o
+.PHONY : src/autocorrect/AutoCorrector.o
+
+# target to build an object file
+src/autocorrect/AutoCorrector.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Quail_Compiler.dir/build.make CMakeFiles/Quail_Compiler.dir/src/autocorrect/AutoCorrector.cpp.o
+.PHONY : src/autocorrect/AutoCorrector.cpp.o
+
+src/autocorrect/AutoCorrector.i: src/autocorrect/AutoCorrector.cpp.i
+.PHONY : src/autocorrect/AutoCorrector.i
+
+# target to preprocess a source file
+src/autocorrect/AutoCorrector.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Quail_Compiler.dir/build.make CMakeFiles/Quail_Compiler.dir/src/autocorrect/AutoCorrector.cpp.i
+.PHONY : src/autocorrect/AutoCorrector.cpp.i
+
+src/autocorrect/AutoCorrector.s: src/autocorrect/AutoCorrector.cpp.s
+.PHONY : src/autocorrect/AutoCorrector.s
+
+# target to generate assembly for a file
+src/autocorrect/AutoCorrector.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Quail_Compiler.dir/build.make CMakeFiles/Quail_Compiler.dir/src/autocorrect/AutoCorrector.cpp.s
+.PHONY : src/autocorrect/AutoCorrector.cpp.s
 
 src/codegen/CodeGen.o: src/codegen/CodeGen.cpp.o
 .PHONY : src/codegen/CodeGen.o
@@ -324,6 +348,9 @@ help:
 	@echo "... intrinsics_gen"
 	@echo "... omp_gen"
 	@echo "... Quail_Compiler"
+	@echo "... src/autocorrect/AutoCorrector.o"
+	@echo "... src/autocorrect/AutoCorrector.i"
+	@echo "... src/autocorrect/AutoCorrector.s"
 	@echo "... src/codegen/CodeGen.o"
 	@echo "... src/codegen/CodeGen.i"
 	@echo "... src/codegen/CodeGen.s"

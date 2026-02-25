@@ -1,7 +1,7 @@
 CMakeFiles/Quail_Compiler.dir/src/semantic/SymbolTable.cpp.o: \
- /home/pranaydadi/Documents/Course\ Projects/Quail_Compiler/src/semantic/SymbolTable.cpp \
+ /home/pranaydadi/Documents/Quail_Compiler/src/semantic/SymbolTable.cpp \
  /usr/include/stdc-predef.h \
- /home/pranaydadi/Documents/Course\ Projects/Quail_Compiler/include/semantic/SymbolTable.h \
+ /home/pranaydadi/Documents/Quail_Compiler/include/semantic/SymbolTable.h \
  /usr/include/c++/11/string \
  /usr/include/x86_64-linux-gnu/c++/11/bits/c++config.h \
  /usr/include/x86_64-linux-gnu/c++/11/bits/os_defines.h \

@@ -1,8 +1,8 @@
 CMakeFiles/Quail_Compiler.dir/src/codegen/CodeGen.cpp.o: \
- /home/pranaydadi/Documents/Course\ Projects/Quail_Compiler/src/codegen/CodeGen.cpp \
+ /home/pranaydadi/Documents/Quail_Compiler/src/codegen/CodeGen.cpp \
  /usr/include/stdc-predef.h \
- /home/pranaydadi/Documents/Course\ Projects/Quail_Compiler/include/codegen/CodeGen.h \
- /home/pranaydadi/Documents/Course\ Projects/Quail_Compiler/include/parser/AST.h \
+ /home/pranaydadi/Documents/Quail_Compiler/include/codegen/CodeGen.h \
+ /home/pranaydadi/Documents/Quail_Compiler/include/parser/AST.h \
  /usr/include/c++/11/memory /usr/include/c++/11/bits/stl_algobase.h \
  /usr/include/x86_64-linux-gnu/c++/11/bits/c++config.h \
  /usr/include/x86_64-linux-gnu/c++/11/bits/os_defines.h \
@@ -152,8 +152,26 @@ CMakeFiles/Quail_Compiler.dir/src/codegen/CodeGen.cpp.o: \
  /usr/include/c++/11/bits/basic_string.tcc /usr/include/c++/11/vector \
  /usr/include/c++/11/bits/stl_vector.h \
  /usr/include/c++/11/bits/stl_bvector.h \
- /usr/include/c++/11/bits/vector.tcc \
- /home/pranaydadi/Documents/Course\ Projects/Quail_Compiler/include/semantic/SymbolTable.h \
+ /usr/include/c++/11/bits/vector.tcc /usr/include/c++/11/iostream \
+ /usr/include/c++/11/ostream /usr/include/c++/11/ios \
+ /usr/include/c++/11/bits/ios_base.h \
+ /usr/include/c++/11/bits/locale_classes.h \
+ /usr/include/c++/11/bits/locale_classes.tcc \
+ /usr/include/c++/11/system_error \
+ /usr/include/x86_64-linux-gnu/c++/11/bits/error_constants.h \
+ /usr/include/c++/11/stdexcept /usr/include/c++/11/streambuf \
+ /usr/include/c++/11/bits/streambuf.tcc \
+ /usr/include/c++/11/bits/basic_ios.h \
+ /usr/include/c++/11/bits/locale_facets.h /usr/include/c++/11/cwctype \
+ /usr/include/wctype.h /usr/include/x86_64-linux-gnu/bits/wctype-wchar.h \
+ /usr/include/x86_64-linux-gnu/c++/11/bits/ctype_base.h \
+ /usr/include/c++/11/bits/streambuf_iterator.h \
+ /usr/include/x86_64-linux-gnu/c++/11/bits/ctype_inline.h \
+ /usr/include/c++/11/bits/locale_facets.tcc \
+ /usr/include/c++/11/bits/basic_ios.tcc \
+ /usr/include/c++/11/bits/ostream.tcc /usr/include/c++/11/istream \
+ /usr/include/c++/11/bits/istream.tcc \
+ /home/pranaydadi/Documents/Quail_Compiler/include/semantic/SymbolTable.h \
  /usr/include/c++/11/unordered_map /usr/include/c++/11/bits/hashtable.h \
  /usr/include/c++/11/bits/hashtable_policy.h \
  /usr/include/c++/11/bits/enable_special_members.h \
@@ -190,13 +208,6 @@ CMakeFiles/Quail_Compiler.dir/src/codegen/CodeGen.cpp.o: \
  /usr/lib/llvm-14/include/llvm/ADT/iterator.h \
  /usr/lib/llvm-14/include/llvm/ADT/iterator_range.h \
  /usr/include/c++/11/iterator /usr/include/c++/11/bits/stream_iterator.h \
- /usr/include/c++/11/bits/streambuf_iterator.h \
- /usr/include/c++/11/streambuf /usr/include/c++/11/bits/ios_base.h \
- /usr/include/c++/11/bits/locale_classes.h \
- /usr/include/c++/11/bits/locale_classes.tcc \
- /usr/include/c++/11/system_error \
- /usr/include/x86_64-linux-gnu/c++/11/bits/error_constants.h \
- /usr/include/c++/11/stdexcept /usr/include/c++/11/bits/streambuf.tcc \
  /usr/lib/llvm-14/include/llvm/Config/abi-breaking.h \
  /usr/include/c++/11/limits /usr/lib/llvm-14/include/llvm/ADT/StringRef.h \
  /usr/lib/llvm-14/include/llvm/ADT/DenseMapInfo.h \
@@ -342,24 +353,7 @@ CMakeFiles/Quail_Compiler.dir/src/codegen/CodeGen.cpp.o: \
  /usr/lib/llvm-14/include/llvm/IR/ValueHandle.h /usr/include/c++/11/map \
  /usr/include/c++/11/bits/stl_map.h \
  /usr/include/c++/11/bits/stl_multimap.h \
- /home/pranaydadi/Documents/Course\ Projects/Quail_Compiler/include/utils/Logger.h \
- /usr/include/c++/11/iostream /usr/include/c++/11/ostream \
- /usr/include/c++/11/ios /usr/include/c++/11/bits/basic_ios.h \
- /usr/include/c++/11/bits/locale_facets.h /usr/include/c++/11/cwctype \
- /usr/include/wctype.h /usr/include/x86_64-linux-gnu/bits/wctype-wchar.h \
- /usr/include/x86_64-linux-gnu/c++/11/bits/ctype_base.h \
- /usr/include/x86_64-linux-gnu/c++/11/bits/ctype_inline.h \
- /usr/include/c++/11/bits/locale_facets.tcc \
- /usr/include/c++/11/bits/basic_ios.tcc \
- /usr/include/c++/11/bits/ostream.tcc /usr/include/c++/11/istream \
- /usr/include/c++/11/bits/istream.tcc \
- /usr/lib/llvm-14/include/llvm/Passes/PassBuilder.h \
- /usr/lib/llvm-14/include/llvm/Analysis/CGSCCPassManager.h \
- /usr/lib/llvm-14/include/llvm/ADT/PriorityWorklist.h \
- /usr/lib/llvm-14/include/llvm/Analysis/LazyCallGraph.h \
- /usr/lib/llvm-14/include/llvm/ADT/SetVector.h \
- /usr/lib/llvm-14/include/llvm/Analysis/TargetLibraryInfo.h \
- /usr/lib/llvm-14/include/llvm/ADT/BitVector.h \
+ /usr/lib/llvm-14/include/llvm/IR/Verifier.h \
  /usr/lib/llvm-14/include/llvm/IR/PassManager.h \
  /usr/lib/llvm-14/include/llvm/ADT/TinyPtrVector.h \
  /usr/lib/llvm-14/include/llvm/IR/PassInstrumentation.h \
@@ -369,7 +363,15 @@ CMakeFiles/Quail_Compiler.dir/src/codegen/CodeGen.cpp.o: \
  /usr/lib/llvm-14/include/llvm/Support/TimeProfiler.h \
  /usr/lib/llvm-14/include/llvm/Support/TypeName.h \
  /usr/include/c++/11/list /usr/include/c++/11/bits/stl_list.h \
- /usr/include/c++/11/bits/list.tcc /usr/lib/llvm-14/include/llvm/Pass.h \
+ /usr/include/c++/11/bits/list.tcc \
+ /usr/lib/llvm-14/include/llvm/Passes/PassBuilder.h \
+ /usr/lib/llvm-14/include/llvm/Analysis/CGSCCPassManager.h \
+ /usr/lib/llvm-14/include/llvm/ADT/PriorityWorklist.h \
+ /usr/lib/llvm-14/include/llvm/Analysis/LazyCallGraph.h \
+ /usr/lib/llvm-14/include/llvm/ADT/SetVector.h \
+ /usr/lib/llvm-14/include/llvm/Analysis/TargetLibraryInfo.h \
+ /usr/lib/llvm-14/include/llvm/ADT/BitVector.h \
+ /usr/lib/llvm-14/include/llvm/Pass.h \
  /usr/lib/llvm-14/include/llvm/PassAnalysisSupport.h \
  /usr/lib/llvm-14/include/llvm/PassSupport.h \
  /usr/lib/llvm-14/include/llvm/PassInfo.h \
@@ -434,4 +436,11 @@ CMakeFiles/Quail_Compiler.dir/src/codegen/CodeGen.cpp.o: \
  /usr/lib/llvm-14/include/llvm/Transforms/Utils/ValueMapper.h \
  /usr/lib/llvm-14/include/llvm/IR/ValueMap.h \
  /usr/lib/llvm-14/include/llvm/Support/Mutex.h \
- /usr/lib/llvm-14/include/llvm/IR/Verifier.h
+ /usr/lib/llvm-14/include/llvm/Transforms/InstCombine/InstCombine.h \
+ /usr/lib/llvm-14/include/llvm/Transforms/Utils/InstructionWorklist.h \
+ /usr/lib/llvm-14/include/llvm/Transforms/Scalar/GVN.h \
+ /usr/lib/llvm-14/include/llvm/Analysis/InstructionPrecedenceTracking.h \
+ /usr/lib/llvm-14/include/llvm/Transforms/Scalar/Reassociate.h \
+ /usr/lib/llvm-14/include/llvm/Transforms/Scalar/SimplifyCFG.h \
+ /usr/lib/llvm-14/include/llvm/Transforms/Utils/SimplifyCFGOptions.h \
+ /usr/lib/llvm-14/include/llvm/Transforms/Utils/Mem2Reg.h

@@ -4,7 +4,7 @@
 # compile CXX with /usr/bin/c++
 CXX_DEFINES = 
 
-CXX_INCLUDES = -I/usr/lib/llvm-14/include -I"/home/pranaydadi/Documents/Course Projects/Quail_Compiler/include"
+CXX_INCLUDES = -I/usr/lib/llvm-14/include -I/home/pranaydadi/Documents/Quail_Compiler/include
 
 CXX_FLAGS =   -D_GNU_SOURCE -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -D__STDC_LIMIT_MACROS -std=gnu++17
 
