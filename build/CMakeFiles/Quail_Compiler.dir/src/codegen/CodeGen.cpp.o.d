@@ -247,9 +247,12 @@ CMakeFiles/Quail_Compiler.dir/src/codegen/CodeGen.cpp.o: \
  /usr/include/c++/11/tr1/poly_laguerre.tcc \
  /usr/include/c++/11/tr1/riemann_zeta.tcc \
  /usr/lib/llvm-14/include/llvm/IR/Value.def \
- /usr/lib/llvm-14/include/llvm/IR/IRBuilder.h \
+ /usr/lib/llvm-14/include/llvm/IR/Type.h \
  /usr/lib/llvm-14/include/llvm/ADT/ArrayRef.h \
  /usr/lib/llvm-14/include/llvm/ADT/SmallVector.h \
+ /usr/lib/llvm-14/include/llvm/Support/TypeSize.h \
+ /usr/lib/llvm-14/include/llvm/Support/raw_ostream.h \
+ /usr/lib/llvm-14/include/llvm/IR/IRBuilder.h \
  /usr/lib/llvm-14/include/llvm/ADT/Twine.h \
  /usr/lib/llvm-14/include/llvm/IR/BasicBlock.h \
  /usr/lib/llvm-14/include/llvm/ADT/ilist.h \
@@ -287,10 +290,7 @@ CMakeFiles/Quail_Compiler.dir/src/codegen/CodeGen.cpp.o: \
  /usr/lib/llvm-14/include/llvm/ADT/APInt.h \
  /usr/lib/llvm-14/include/llvm/ADT/FloatingPointMode.h \
  /usr/lib/llvm-14/include/llvm/ADT/StringSwitch.h \
- /usr/lib/llvm-14/include/llvm/Support/raw_ostream.h \
  /usr/lib/llvm-14/include/llvm/IR/DerivedTypes.h \
- /usr/lib/llvm-14/include/llvm/IR/Type.h \
- /usr/lib/llvm-14/include/llvm/Support/TypeSize.h \
  /usr/lib/llvm-14/include/llvm/IR/OperandTraits.h \
  /usr/lib/llvm-14/include/llvm/IR/IRBuilderFolder.h \
  /usr/lib/llvm-14/include/llvm/IR/InstrTypes.h \

@@ -5,16 +5,34 @@
 #include <vector>
 #include <iostream>
 
+// ── Language value types (mirrored from SymbolTable for AST use) ──
+// We redeclare here so AST.h has no dependency on LLVM headers.
+enum class ASTType {
+    Int,
+    Float,
+    Void,
+    Unknown
+};
+
+static inline std::string astTypeName(ASTType t) {
+    switch (t) {
+        case ASTType::Int:     return "int";
+        case ASTType::Float:   return "float";
+        case ASTType::Void:    return "void";
+        case ASTType::Unknown: return "<unknown>";
+    }
+    return "<unknown>";
+}
+
 // ── Base ──────────────────────────────────────────────────────
 struct AST {
     virtual ~AST() = default;
     virtual void print(int indent = 0) const = 0;
-    // True for nodes that produce no IR (e.g. comments)
     virtual bool isNoOp() const { return false; }
 };
 
 // ─────────────────────────────────────────────────────────────
-//  COMMENTS  (NEW)
+//  COMMENTS
 // ─────────────────────────────────────────────────────────────
 
 struct LineCommentAST : AST {
@@ -22,8 +40,7 @@ struct LineCommentAST : AST {
     explicit LineCommentAST(std::string t) : text(std::move(t)) {}
     bool isNoOp() const override { return true; }
     void print(int indent) const override {
-        std::cout << std::string(indent, ' ')
-                  << "// " << text << "\n";
+        std::cout << std::string(indent, ' ') << "// " << text << "\n";
     }
 };
 
@@ -32,8 +49,7 @@ struct BlockCommentAST : AST {
     explicit BlockCommentAST(std::string t) : text(std::move(t)) {}
     bool isNoOp() const override { return true; }
     void print(int indent) const override {
-        std::string pad(indent, ' ');
-        std::cout << pad << "/* " << text << " */\n";
+        std::cout << std::string(indent, ' ') << "/* " << text << " */\n";
     }
 };
 
@@ -45,7 +61,7 @@ struct NumberAST : AST {
     int val;
     explicit NumberAST(int v) : val(v) {}
     void print(int indent) const override {
-        std::cout << std::string(indent, ' ') << "Number: " << val << "\n";
+        std::cout << std::string(indent, ' ') << "Number(int): " << val << "\n";
     }
 };
 
@@ -53,7 +69,7 @@ struct FloatAST : AST {
     double val;
     explicit FloatAST(double v) : val(v) {}
     void print(int indent) const override {
-        std::cout << std::string(indent, ' ') << "Float: " << val << "\n";
+        std::cout << std::string(indent, ' ') << "Number(float): " << val << "\n";
     }
 };
 
@@ -119,11 +135,17 @@ struct ReturnAST : AST {
     }
 };
 
+// ── VarDeclAST now carries its declared type ──────────────────
 struct VarDeclAST : AST {
     std::string name;
-    explicit VarDeclAST(const std::string& n) : name(n) {}
+    ASTType     type;   // int or float
+
+    explicit VarDeclAST(const std::string& n, ASTType t = ASTType::Int)
+        : name(n), type(t) {}
+
     void print(int indent) const override {
-        std::cout << std::string(indent, ' ') << "VarDecl: " << name << "\n";
+        std::cout << std::string(indent, ' ')
+                  << "VarDecl: " << astTypeName(type) << " " << name << "\n";
     }
 };
 
@@ -150,8 +172,7 @@ struct IfAST : AST {
     std::unique_ptr<AST> cond, thenBlock, elseBlock;
     void print(int indent) const override {
         std::string sp(indent, ' ');
-        std::cout << sp << "IfStatement\n"
-                  << sp << "  Condition:\n";
+        std::cout << sp << "IfStatement\n" << sp << "  Condition:\n";
         if (cond)      cond->print(indent + 4);
         std::cout << sp << "  Then:\n";
         if (thenBlock) thenBlock->print(indent + 4);
@@ -199,16 +220,21 @@ struct ContinueAST : AST {
 };
 
 // ─────────────────────────────────────────────────────────────
-//  Declarations
+//  Array declarations — now carry element type
 // ─────────────────────────────────────────────────────────────
 
 struct ArrayDeclAST : AST {
     std::string name;
-    int size;
-    ArrayDeclAST(const std::string& n, int s) : name(n), size(s) {}
+    int         size;
+    ASTType     type;   // int or float
+
+    ArrayDeclAST(const std::string& n, int s, ASTType t = ASTType::Int)
+        : name(n), size(s), type(t) {}
+
     void print(int indent) const override {
         std::cout << std::string(indent, ' ')
-                  << "ArrayDecl: " << name << "[" << size << "]\n";
+                  << "ArrayDecl: " << astTypeName(type)
+                  << " " << name << "[" << size << "]\n";
     }
 };
 
@@ -239,16 +265,24 @@ struct ArrayAssignAST : AST {
 };
 
 // ─────────────────────────────────────────────────────────────
-//  Functions
+//  Functions — now carry return type and parameter types
 // ─────────────────────────────────────────────────────────────
 
 struct PrototypeAST : AST {
-    std::string name;
+    std::string              name;
     std::vector<std::string> args;
+    std::vector<ASTType>     argTypes;   // parallel to args
+    ASTType                  returnType = ASTType::Int;
+
     void print(int indent) const override {
         std::cout << std::string(indent, ' ')
-                  << "FunctionPrototype: " << name << "(";
-        for (const auto& a : args) std::cout << a << " ";
+                  << "FunctionPrototype: "
+                  << astTypeName(returnType) << " " << name << "(";
+        for (size_t i = 0; i < args.size(); ++i) {
+            if (i) std::cout << ", ";
+            std::cout << astTypeName(i < argTypes.size() ? argTypes[i] : ASTType::Int)
+                      << " " << args[i];
+        }
         std::cout << ")\n";
     }
 };
@@ -280,7 +314,7 @@ struct CallAST : AST {
 // ─────────────────────────────────────────────────────────────
 
 struct ProgramAST : AST {
-    std::vector<std::unique_ptr<AST>> topLevel;   // functions + top-level comments
+    std::vector<std::unique_ptr<AST>> topLevel;
     void print(int indent) const override {
         std::cout << "--- [SYNTACTIC VALIDATION: AST TREE] ---\n";
         for (const auto& e : topLevel) e->print(indent);

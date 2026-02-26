@@ -4,8 +4,8 @@ source_filename = "quail"
 ; Function Attrs: mustprogress nofree norecurse nosync nounwind readnone willreturn
 define i32 @max(i32 %0, i32 %1) local_unnamed_addr #0 {
 entry:
-  %2 = icmp sgt i32 %0, %1
-  %common.ret.op = select i1 %2, i32 %0, i32 %1
+  %gt = icmp sgt i32 %0, %1
+  %common.ret.op = select i1 %gt, i32 %0, i32 %1
   ret i32 %common.ret.op
 }
 

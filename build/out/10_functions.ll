@@ -4,22 +4,22 @@ source_filename = "quail"
 ; Function Attrs: mustprogress nofree norecurse nosync nounwind readnone willreturn
 define i32 @add(i32 %0, i32 %1) local_unnamed_addr #0 {
 entry:
-  %2 = add i32 %1, %0
-  ret i32 %2
+  %add = add i32 %1, %0
+  ret i32 %add
 }
 
 ; Function Attrs: mustprogress nofree norecurse nosync nounwind readnone willreturn
 define i32 @multiply(i32 %0, i32 %1) local_unnamed_addr #0 {
 entry:
-  %2 = mul i32 %1, %0
-  ret i32 %2
+  %mul = mul i32 %1, %0
+  ret i32 %mul
 }
 
 ; Function Attrs: mustprogress nofree norecurse nosync nounwind readnone willreturn
 define i32 @square(i32 %0) local_unnamed_addr #0 {
 entry:
-  %1 = mul i32 %0, %0
-  ret i32 %1
+  %mul.i = mul i32 %0, %0
+  ret i32 %mul.i
 }
 
 ; Function Attrs: mustprogress nofree norecurse nosync nounwind readnone willreturn

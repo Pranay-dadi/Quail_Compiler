@@ -9,27 +9,23 @@
 #include <memory>
 #include <vector>
 #include <string>
+#include <utility>
 
-// ── Optimization levels ───────────────────────────────────────────────────────
-enum class OptLevel {
-    O0,   // No optimization
-    O1,   // Basic optimizations (mem2reg, instcombine, simplifyCFG)
-    O2,   // Standard optimizations (default LLVM O2 pipeline)
-    O3    // Aggressive optimizations (O3 + vectorization)
-};
+// ── Optimization levels ───────────────────────────────────────
+enum class OptLevel { O0, O1, O2, O3 };
 
-// ── Optimization statistics ───────────────────────────────────────────────────
+// ── Optimization statistics ───────────────────────────────────
 struct OptStats {
     struct FuncStat {
         std::string name;
-        size_t instrBefore = 0;
-        size_t instrAfter  = 0;
+        size_t instrBefore  = 0;
+        size_t instrAfter   = 0;
         size_t blocksBefore = 0;
         size_t blocksAfter  = 0;
     };
     std::vector<FuncStat> functions;
-    size_t totalInstrBefore = 0;
-    size_t totalInstrAfter  = 0;
+    size_t totalInstrBefore  = 0;
+    size_t totalInstrAfter   = 0;
     size_t totalBlocksBefore = 0;
     size_t totalBlocksAfter  = 0;
 
@@ -48,13 +44,8 @@ public:
     CodeGen();
 
     llvm::Value* generate(AST* node);
-
-    // Run the optimizer at the requested level; populates optStats
     void         optimize(OptLevel level = OptLevel::O2);
-
-    // Capture raw IR text (before or after opt) for display/diff
     std::string  getIRString() const;
-
     llvm::Value* toBool(llvm::Value* val);
     void         dumpToFile(const std::string& filename);
     void         dump();
@@ -75,4 +66,15 @@ private:
 
     void addError(const std::string& msg);
     void collectStats(OptStats::FuncStat& fs, llvm::Function& fn, bool before);
+
+    // ── Type helpers ──────────────────────────────────────────
+    llvm::Type* llvmType(ASTType   t);
+    llvm::Type* llvmType(ValueType t);
+
+    // Coerce value to target LLVM type (int↔float, i1↔i32, etc.)
+    llvm::Value* coerce(llvm::Value* val, llvm::Type* targetTy);
+
+    // Promote both operands to the same numeric type for binary ops
+    std::pair<llvm::Value*, llvm::Value*>
+    promoteToCommon(llvm::Value* lhs, llvm::Value* rhs);
 };

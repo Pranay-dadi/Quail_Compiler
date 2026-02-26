@@ -4,20 +4,20 @@ source_filename = "quail"
 ; Function Attrs: nofree nosync nounwind readnone
 define i32 @factorial(i32 %0) local_unnamed_addr #0 {
 entry:
-  %1 = icmp slt i32 %0, 2
-  br i1 %1, label %common.ret, label %ifcont
+  %le6 = icmp slt i32 %0, 2
+  br i1 %le6, label %common.ret, label %ifcont
 
 common.ret:                                       ; preds = %ifcont, %entry
-  %accumulator.tr.lcssa = phi i32 [ 1, %entry ], [ %3, %ifcont ]
+  %accumulator.tr.lcssa = phi i32 [ 1, %entry ], [ %mul, %ifcont ]
   ret i32 %accumulator.tr.lcssa
 
 ifcont:                                           ; preds = %entry, %ifcont
-  %.tr7 = phi i32 [ %2, %ifcont ], [ %0, %entry ]
-  %accumulator.tr6 = phi i32 [ %3, %ifcont ], [ 1, %entry ]
-  %2 = add nsw i32 %.tr7, -1
-  %3 = mul i32 %.tr7, %accumulator.tr6
-  %4 = icmp ult i32 %.tr7, 3
-  br i1 %4, label %common.ret, label %ifcont
+  %.tr8 = phi i32 [ %sub, %ifcont ], [ %0, %entry ]
+  %accumulator.tr7 = phi i32 [ %mul, %ifcont ], [ 1, %entry ]
+  %sub = add nsw i32 %.tr8, -1
+  %mul = mul i32 %.tr8, %accumulator.tr7
+  %le = icmp ult i32 %.tr8, 3
+  br i1 %le, label %common.ret, label %ifcont
 }
 
 ; Function Attrs: nofree norecurse nosync nounwind readnone
