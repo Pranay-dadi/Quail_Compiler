@@ -1,15 +1,11 @@
 #include "semantic/SymbolTable.h"
 #include <stdexcept>
 
-// ── Constructor ────────────────────────────────────────────────
 SymbolTable::SymbolTable() {
-    enterScope(); // global scope always present
+    enterScope(); // global scope
 }
 
-// ── Scope management ──────────────────────────────────────────
-void SymbolTable::enterScope() {
-    scopes.emplace_back();
-}
+void SymbolTable::enterScope() { scopes.emplace_back(); }
 
 void SymbolTable::exitScope() {
     if (scopes.size() <= 1)
@@ -17,7 +13,21 @@ void SymbolTable::exitScope() {
     scopes.pop_back();
 }
 
-// ── Insert variable / array ────────────────────────────────────
+// ── Log helper ────────────────────────────────────────────────
+void SymbolTable::appendLog(const Symbol& sym) {
+    SymbolLogEntry e;
+    e.name          = sym.name;
+    e.kind          = sym.kind;
+    e.type          = sym.type;
+    e.arraySize     = sym.arraySize;
+    e.scopeDepth    = sym.definedAtDepth;
+    e.ownerFunction = currentFunction;
+    e.paramTypes    = sym.paramTypes;
+    e.returnType    = sym.returnType;
+    log.push_back(e);
+}
+
+// ── insert ────────────────────────────────────────────────────
 void SymbolTable::insert(const std::string& name,
                          ValueType          type,
                          SymbolKind         kind,
@@ -29,8 +39,7 @@ void SymbolTable::insert(const std::string& name,
 
     auto& top = scopes.back();
     if (top.count(name))
-        throw std::runtime_error(
-            "Redeclaration of '" + name + "' in the same scope");
+        throw std::runtime_error("Redeclaration of '" + name + "' in the same scope");
 
     Symbol sym;
     sym.name           = name;
@@ -39,41 +48,44 @@ void SymbolTable::insert(const std::string& name,
     sym.value          = value;
     sym.arraySize      = arraySize;
     sym.definedAtDepth = currentDepth();
+    sym.ownerFunction  = currentFunction;
     top[name] = sym;
+
+    appendLog(sym);
 }
 
-// ── Insert function signature ──────────────────────────────────
-void SymbolTable::insertFunction(const std::string&         name,
-                                 ValueType                  returnType,
+// ── insertFunction ────────────────────────────────────────────
+void SymbolTable::insertFunction(const std::string&            name,
+                                 ValueType                     returnType,
                                  const std::vector<ValueType>& paramTypes,
-                                 llvm::Value*               value)
+                                 llvm::Value*                  value)
 {
     if (scopes.empty())
         throw std::runtime_error("[SymbolTable] No active scope");
 
-    // Functions are always inserted into the global (outermost) scope
     auto& global = scopes.front();
     if (global.count(name))
-        throw std::runtime_error(
-            "Redefinition of function '" + name + "'");
+        throw std::runtime_error("Redefinition of function '" + name + "'");
 
     Symbol sym;
-    sym.name        = name;
-    sym.kind        = SymbolKind::Function;
-    sym.type        = returnType;
-    sym.returnType  = returnType;
-    sym.paramTypes  = paramTypes;
-    sym.value       = value;
+    sym.name           = name;
+    sym.kind           = SymbolKind::Function;
+    sym.type           = returnType;
+    sym.returnType     = returnType;
+    sym.paramTypes     = paramTypes;
+    sym.value          = value;
     sym.definedAtDepth = 0;
+    sym.ownerFunction  = "";
     global[name] = sym;
+
+    appendLog(sym);
 }
 
-// ── Lookup (outer → inner search, inner shadows outer) ────────
+// ── lookup ────────────────────────────────────────────────────
 Symbol* SymbolTable::lookup(const std::string& name) {
     for (auto it = scopes.rbegin(); it != scopes.rend(); ++it) {
         auto found = it->find(name);
-        if (found != it->end())
-            return &found->second;
+        if (found != it->end()) return &found->second;
     }
     return nullptr;
 }
@@ -81,38 +93,32 @@ Symbol* SymbolTable::lookup(const std::string& name) {
 const Symbol* SymbolTable::lookup(const std::string& name) const {
     for (auto it = scopes.rbegin(); it != scopes.rend(); ++it) {
         auto found = it->find(name);
-        if (found != it->end())
-            return &found->second;
+        if (found != it->end()) return &found->second;
     }
     return nullptr;
 }
 
-// ── Current-scope-only lookup ─────────────────────────────────
 const Symbol* SymbolTable::lookupCurrentScope(const std::string& name) const {
     if (scopes.empty()) return nullptr;
     auto found = scopes.back().find(name);
-    return (found != scopes.back().end()) ? &found->second : nullptr;
+    return found != scopes.back().end() ? &found->second : nullptr;
 }
 
-// ── Convenience: LLVM value ───────────────────────────────────
 llvm::Value* SymbolTable::lookupValue(const std::string& name) const {
     const Symbol* s = lookup(name);
     return s ? s->value : nullptr;
 }
 
-// ── Convenience: declared type ────────────────────────────────
 ValueType SymbolTable::lookupType(const std::string& name) const {
     const Symbol* s = lookup(name);
     return s ? s->type : ValueType::Unknown;
 }
 
-// ── Update LLVM value (e.g. after alloca is created) ─────────
 void SymbolTable::updateValue(const std::string& name, llvm::Value* value) {
     Symbol* s = lookup(name);
     if (s) s->value = value;
 }
 
-// ── Type name helper ──────────────────────────────────────────
 std::string SymbolTable::typeName(ValueType t) {
     switch (t) {
         case ValueType::Int:     return "int";
@@ -121,4 +127,14 @@ std::string SymbolTable::typeName(ValueType t) {
         case ValueType::Unknown: return "<unknown>";
     }
     return "<unknown>";
+}
+
+std::string SymbolTable::kindName(SymbolKind k) {
+    switch (k) {
+        case SymbolKind::Variable:  return "variable";
+        case SymbolKind::Array:     return "array";
+        case SymbolKind::Function:  return "function";
+        case SymbolKind::Parameter: return "parameter";
+    }
+    return "?";
 }

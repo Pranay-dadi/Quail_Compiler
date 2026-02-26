@@ -350,9 +350,7 @@ CMakeFiles/Quail_Compiler.dir/src/codegen/CodeGen.cpp.o: \
  /usr/lib/llvm-14/include/llvm/IR/ProfileSummary.h \
  /usr/lib/llvm-14/include/llvm/Support/CodeGen.h \
  /usr/lib/llvm-14/include/llvm/IR/Operator.h \
- /usr/lib/llvm-14/include/llvm/IR/ValueHandle.h /usr/include/c++/11/map \
- /usr/include/c++/11/bits/stl_map.h \
- /usr/include/c++/11/bits/stl_multimap.h \
+ /usr/lib/llvm-14/include/llvm/IR/ValueHandle.h \
  /usr/lib/llvm-14/include/llvm/IR/Verifier.h \
  /usr/lib/llvm-14/include/llvm/IR/PassManager.h \
  /usr/lib/llvm-14/include/llvm/ADT/TinyPtrVector.h \

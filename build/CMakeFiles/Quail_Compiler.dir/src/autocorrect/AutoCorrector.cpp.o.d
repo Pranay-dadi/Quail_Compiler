@@ -359,7 +359,5 @@ CMakeFiles/Quail_Compiler.dir/src/autocorrect/AutoCorrector.cpp.o: \
  /usr/lib/llvm-14/include/llvm/IR/ProfileSummary.h \
  /usr/lib/llvm-14/include/llvm/Support/CodeGen.h \
  /usr/lib/llvm-14/include/llvm/IR/Operator.h \
- /usr/lib/llvm-14/include/llvm/IR/ValueHandle.h /usr/include/c++/11/map \
- /usr/include/c++/11/bits/stl_map.h \
- /usr/include/c++/11/bits/stl_multimap.h /usr/include/c++/11/sstream \
- /usr/include/c++/11/bits/sstream.tcc
+ /usr/lib/llvm-14/include/llvm/IR/ValueHandle.h \
+ /usr/include/c++/11/sstream /usr/include/c++/11/bits/sstream.tcc

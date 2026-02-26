@@ -263,6 +263,82 @@ struct CompileResult {
     int         commentCount = 0;
 };
 
+
+// ── Symbol table display ───────────────────────────────────────
+static void printSymbolTable(const std::vector<SymbolLogEntry>& log) {
+    if (log.empty()) {
+        std::cout << DIM << "  (symbol table empty)\n" << RESET;
+        return;
+    }
+
+    // Separate functions from locals/params
+    std::vector<const SymbolLogEntry*> functions, locals;
+    for (const auto& e : log) {
+        if (e.kind == SymbolKind::Function) functions.push_back(&e);
+        else                                locals.push_back(&e);
+    }
+
+    // ── Functions ────────────────────────────────────────────
+    std::cout << "\n" << BOLD << CYAN
+              << "  ┌─────────────────────────────────────────────────────────┐\n"
+              << "  │                    FUNCTIONS                            │\n"
+              << "  └─────────────────────────────────────────────────────────┘\n"
+              << RESET;
+
+    if (functions.empty()) {
+        std::cout << DIM << "    (none)\n" << RESET;
+    } else {
+        for (const auto* e : functions) {
+            std::string sig = SymbolTable::typeName(e->returnType) + " " + e->name + "(";
+            for (size_t i = 0; i < e->paramTypes.size(); ++i) {
+                if (i) sig += ", ";
+                sig += SymbolTable::typeName(e->paramTypes[i]);
+            }
+            sig += ")";
+            std::cout << "  " << GREEN << BOLD << "  fn  " << RESET
+                      << BOLD << std::left << std::setw(40) << sig << RESET
+                      << DIM << "  [global scope]" << RESET << "\n";
+        }
+    }
+
+    // ── Locals / Parameters grouped by owning function ────────
+    std::cout << "\n" << BOLD << CYAN
+              << "  ┌─────────────────────────────────────────────────────────┐\n"
+              << "  │              VARIABLES & PARAMETERS                     │\n"
+              << "  └─────────────────────────────────────────────────────────┘\n"
+              << RESET;
+
+    if (locals.empty()) {
+        std::cout << DIM << "    (none)\n" << RESET;
+    } else {
+        // Group by ownerFunction
+        std::string lastOwner = "\x01"; // sentinel
+        for (const auto* e : locals) {
+            if (e->ownerFunction != lastOwner) {
+                lastOwner = e->ownerFunction;
+                std::string owner = lastOwner.empty() ? "<global>" : lastOwner;
+                std::cout << "\n  " << YELLOW << BOLD << "  in " << owner << "():" << RESET << "\n";
+            }
+            const char* kindColor =
+                e->kind == SymbolKind::Parameter ? CYAN :
+                e->kind == SymbolKind::Array     ? MAGENTA : BLUE;
+            const char* kindTag =
+                e->kind == SymbolKind::Parameter ? "param" :
+                e->kind == SymbolKind::Array     ? "array" : "var  ";
+
+            std::string typeStr = SymbolTable::typeName(e->type);
+            if (e->kind == SymbolKind::Array)
+                typeStr += "[" + std::to_string(e->arraySize) + "]";
+
+            std::cout << "    " << kindColor << BOLD << kindTag << RESET << "  "
+                      << BOLD << std::left << std::setw(20) << e->name << RESET
+                      << "  " << std::setw(12) << typeStr
+                      << DIM << "  depth=" << e->scopeDepth << RESET << "\n";
+        }
+    }
+    std::cout << "\n";
+}
+
 static CompileResult compileSinglePass(const std::string& displayPath,
                                        const std::string& source,
                                        const std::string& outDir,
@@ -350,6 +426,16 @@ static CompileResult compileSinglePass(const std::string& displayPath,
         res.errorCount = (int)cgErrors.size();
         if (verbose) reportErrors(displayPath, {}, {}, cgErrors);
         return res;
+    }
+
+    // ── SYMBOL TABLE REPORT ───────────────────────────────────
+    if (verbose) {
+        std::cout << "\n" << BOLD << CYAN
+                  << "╔══════════════════════════════════════════════════════════╗\n"
+                  << "║                   SYMBOL TABLE                          ║\n"
+                  << "╚══════════════════════════════════════════════════════════╝\n"
+                  << RESET;
+        printSymbolTable(cg.getSymbolLog());
     }
 
     // ── OPTIMIZATION ──────────────────────────────────────────

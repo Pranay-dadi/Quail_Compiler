@@ -373,6 +373,7 @@ llvm::Value* CodeGen::generate(AST* node) {
         auto* entry = llvm::BasicBlock::Create(context, "entry", fn);
         builder.SetInsertPoint(entry);
         symbols.enterScope();
+        symbols.setCurrentFunction(f->proto->name);
 
         size_t idx = 0;
         for (auto& arg : fn->args()) {
@@ -403,6 +404,7 @@ llvm::Value* CodeGen::generate(AST* node) {
                 builder.CreateRet(llvm::ConstantInt::get(retTy, 0));
         }
 
+        symbols.clearCurrentFunction();
         symbols.exitScope();
 
         // Verify the function

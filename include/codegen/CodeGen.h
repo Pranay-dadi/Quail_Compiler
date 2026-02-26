@@ -4,8 +4,6 @@
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/Module.h>
-#include <map>
-#include <unordered_map>
 #include <memory>
 #include <vector>
 #include <string>
@@ -51,8 +49,12 @@ public:
     void         dump();
 
     bool hasErrors() const { return !errors.empty(); }
-    const std::vector<CodeGenError>& getErrors() const { return errors; }
-    const OptStats& getOptStats() const { return optStats; }
+    const std::vector<CodeGenError>&   getErrors()      const { return errors; }
+    const OptStats&                    getOptStats()    const { return optStats; }
+
+    // ── Symbol table access ───────────────────────────────────
+    // Returns every symbol that was ever inserted (survives scope pops).
+    const std::vector<SymbolLogEntry>& getSymbolLog()   const { return symbols.getLog(); }
 
 private:
     llvm::LLVMContext              context;
@@ -67,14 +69,8 @@ private:
     void addError(const std::string& msg);
     void collectStats(OptStats::FuncStat& fs, llvm::Function& fn, bool before);
 
-    // ── Type helpers ──────────────────────────────────────────
-    llvm::Type* llvmType(ASTType   t);
-    llvm::Type* llvmType(ValueType t);
-
-    // Coerce value to target LLVM type (int↔float, i1↔i32, etc.)
+    llvm::Type*  llvmType(ASTType   t);
+    llvm::Type*  llvmType(ValueType t);
     llvm::Value* coerce(llvm::Value* val, llvm::Type* targetTy);
-
-    // Promote both operands to the same numeric type for binary ops
-    std::pair<llvm::Value*, llvm::Value*>
-    promoteToCommon(llvm::Value* lhs, llvm::Value* rhs);
+    std::pair<llvm::Value*, llvm::Value*> promoteToCommon(llvm::Value* lhs, llvm::Value* rhs);
 };
