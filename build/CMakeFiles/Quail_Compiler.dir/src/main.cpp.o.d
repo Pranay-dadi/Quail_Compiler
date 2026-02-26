@@ -403,4 +403,5 @@ CMakeFiles/Quail_Compiler.dir/src/main.cpp.o: \
  /usr/lib/llvm-14/include/llvm/IR/Operator.h \
  /usr/lib/llvm-14/include/llvm/IR/ValueHandle.h /usr/include/c++/11/map \
  /usr/include/c++/11/bits/stl_map.h \
- /usr/include/c++/11/bits/stl_multimap.h
+ /usr/include/c++/11/bits/stl_multimap.h \
+ /home/pranaydadi/Documents/Quail_Compiler/include/autocorrect/AutoCorrector.h

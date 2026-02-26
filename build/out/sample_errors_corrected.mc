@@ -1,13 +1,13 @@
 int factorial(int n) {
     int result;
-    result = 1            /* missing semicolon */
+    result = 1;            /* missing semicolon */
     int i;
     i = 1;
     while (i <= n) {
-        result = result * i    /* missing semicolon */
+        result = result * i;    /* missing semicolon */
         i++;
     }
-    return result         /* missing semicolon */
+    return result;         /* missing semicolon */
 }
 
 int sum_array(int arr, int len) {
@@ -16,17 +16,17 @@ int sum_array(int arr, int len) {
     int k;
     k = 0;
     while (k < len) {
-        total = total + k     /* missing semicolon */
+        total = total + k;     /* missing semicolon */
         k++;
     }
     return total;
 }
 
 int main() {
-    int x
+    int x;
     x = 5;
     int y;
-    y = factorial(x)      /* missing semicolon */
+    y = factorial(x);      /* missing semicolon */
     int arr[4];
     arr[0] = 1;
     arr[1] = 2;

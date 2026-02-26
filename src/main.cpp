@@ -26,6 +26,7 @@
 #include "lexer/Lexer.h"
 #include "parser/Parser.h"
 #include "codegen/CodeGen.h"
+#include "autocorrect/AutoCorrector.h"
 
 namespace fs = std::filesystem;
 
@@ -106,7 +107,6 @@ static void printTokenTable(const std::vector<Token>& tokens) {
         else if (tv >= static_cast<int>(TokenType::PLUS))          cat = std::string(RED)     + "OP/PUNCT" + RESET;
         else cat = "OTHER";
 
-        // Truncate comment bodies for display
         std::string lex = tk.lexeme;
         if (lex.size() > (size_t)(W1-2)) lex = lex.substr(0, W1-5) + "...";
         std::cout << "| " << std::left << std::setw(W1) << lex
@@ -157,7 +157,6 @@ static void printOptReport(const OptStats& s, OptLevel level, const std::string&
               << RESET;
     std::cout << "  Level: " << BOLD << lvlName << RESET << "\n\n";
 
-    // Per-function table
     const int W=24, N=8;
     std::cout << BOLD
               << std::left << std::setw(W) << "Function"
@@ -203,11 +202,8 @@ static void printOptReport(const OptStats& s, OptLevel level, const std::string&
                   << RESET << "\n";
     }
 
-    // IR diff
     if (showDiff && !irBefore.empty() && !irAfter.empty()) {
         std::cout << "\n" << BOLD << "── IR diff (before → after) ──\n" << RESET;
-
-        // Split into lines and show side-by-side line counts
         auto split = [](const std::string& s) {
             std::vector<std::string> v;
             std::istringstream ss(s); std::string l;
@@ -216,15 +212,12 @@ static void printOptReport(const OptStats& s, OptLevel level, const std::string&
         };
         auto bLines = split(irBefore);
         auto aLines = split(irAfter);
-
         std::cout << DIM
                   << "  Before: " << bLines.size() << " lines\n"
                   << "  After : " << aLines.size() << " lines\n"
                   << "  Reduction: "
                   << (int)bLines.size() - (int)aLines.size() << " lines removed\n"
                   << RESET;
-
-        // Show first 40 lines of optimized IR
         std::cout << "\n" << YELLOW << BOLD << "  Optimized IR (first 40 lines):\n" << RESET;
         int shown = 0;
         for (const auto& l : aLines) {
@@ -260,10 +253,10 @@ static bool reportErrors(const std::string& filename,
 //  Core compile (single pass on given source text)
 // ═══════════════════════════════════════════════════════════════
 struct CompileResult {
-    bool        parseOk  = false;
-    bool        irOk     = false;
-    bool        linkOk   = false;
-    int         exitCode = -1;
+    bool        parseOk    = false;
+    bool        irOk       = false;
+    bool        linkOk     = false;
+    int         exitCode   = -1;
     int         errorCount = 0;
     std::string llPath;
     std::string binPath;
@@ -287,10 +280,9 @@ static CompileResult compileSinglePass(const std::string& displayPath,
 
     // ── LEXER (keepComments=true) ─────────────────────────────
     Lexer lexer(source, true);
-    auto tokens   = lexer.tokenize();
+    auto tokens    = lexer.tokenize();
     auto lexErrors = lexer.getErrors();
 
-    // Count comments
     for (const auto& t : tokens)
         if (t.type == TokenType::LINE_COMMENT || t.type == TokenType::BLOCK_COMMENT)
             res.commentCount++;
@@ -301,7 +293,6 @@ static CompileResult compileSinglePass(const std::string& displayPath,
         printCommentSummary(tokens);
         std::cout << "\n";
     } else if (verbose) {
-        // Condensed token stream
         std::cout << "--- [TOKEN STREAM] ---\n";
         for (const auto& tk : tokens) {
             if (tk.type == TokenType::LINE_COMMENT) {
@@ -324,7 +315,7 @@ static CompileResult compileSinglePass(const std::string& displayPath,
 
     // ── PARSER ────────────────────────────────────────────────
     Parser parser(tokens);
-    auto ast = parser.parse();
+    auto ast         = parser.parse();
     auto parseErrors = parser.getErrors();
 
     if (!lexErrors.empty() || !parseErrors.empty()) {
@@ -397,7 +388,7 @@ static CompileResult compileSinglePass(const std::string& displayPath,
         std::string llcCmd   = "llc "   + res.llPath + " -filetype=obj -o " + objPath + " 2>/dev/null";
         std::string clangCmd = "clang " + objPath    + " -o " + res.binPath            + " 2>/dev/null";
         if (verbose) { std::cout << "\n" << BOLD << "Building...\n" << RESET << "  $ " << llcCmd << "\n"; }
-        bool llcOk = (std::system(llcCmd.c_str()) == 0);
+        bool llcOk   = (std::system(llcCmd.c_str()) == 0);
         if (verbose) std::cout << "  $ " << clangCmd << "\n";
         bool clangOk = llcOk && (std::system(clangCmd.c_str()) == 0);
         res.linkOk = clangOk;
@@ -420,7 +411,7 @@ static CompileResult compileSinglePass(const std::string& displayPath,
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  compileOne  — with optional auto-correction
+//  compileOne — with proper AutoCorrector integration
 // ═══════════════════════════════════════════════════════════════
 static CompileResult compileOne(const std::string& srcPath,
                                 const std::string& outDir,
@@ -434,7 +425,7 @@ static CompileResult compileOne(const std::string& srcPath,
     fs::path p(srcPath);
     std::string stem = p.stem().string();
 
-    // Read source
+    // ── Read source ───────────────────────────────────────────
     std::ifstream file(srcPath);
     if (!file.is_open()) {
         if (verbose) std::cerr << RED << "Cannot open: " << srcPath << RESET << "\n";
@@ -443,191 +434,133 @@ static CompileResult compileOne(const std::string& srcPath,
     std::stringstream buf; buf << file.rdbuf();
     std::string source = buf.str();
 
-    // Quick pre-check: do we have errors at all?
-    {
-        Lexer lx(source, false);       // strip-comments mode for error detection
-        auto toks = lx.tokenize();
-        Parser px(toks);
-        auto ast = px.parse();
-        bool hasErrors = lx.hasErrors() || px.hasErrors();
-        if (!hasErrors && ast) {
-            CodeGen cg0; cg0.generate(ast.get());
-            hasErrors = cg0.hasErrors();
-        }
-
-        if (!hasErrors || !autoCorrect) {
-            // Compile normally (keeping comments this time)
-            return compileSinglePass(srcPath, source, outDir, stem,
-                                     debugMode, buildBinaries, verbose,
-                                     optLevel, showIrDiff);
-        }
-    }
-
-    // ── AUTO-CORRECTION NEEDED ────────────────────────────────
-    if (verbose)
-        std::cout << BOLD << "\n══ PASS 1: Identifying errors ══\n" << RESET;
-
-    // Collect errors (comment-stripped for parser accuracy)
+    // ── PASS 1: error detection (comment-stripped for accuracy) ──
     Lexer lx1(source, false);
-    auto toks1    = lx1.tokenize();
-    auto lexErrs1 = lx1.getErrors();
+    auto toks1     = lx1.tokenize();
+    auto lexErrs1  = lx1.getErrors();
     Parser px1(toks1);
-    auto ast1       = px1.parse();
-    auto parseErrs1 = px1.getErrors();
+    auto ast1        = px1.parse();
+    auto parseErrs1  = px1.getErrors();
     std::vector<CodeGenError> cgErrs1;
+
+    // Only run codegen error detection if lex+parse passed
     if (lexErrs1.empty() && parseErrs1.empty() && ast1) {
-        CodeGen cg1; cg1.generate(ast1.get());
+        CodeGen cg1;
+        cg1.generate(ast1.get());
         cgErrs1 = cg1.getErrors();
     }
-    if (verbose) reportErrors(srcPath, lexErrs1, parseErrs1, cgErrs1);
 
-    // ── Inline auto-corrector (re-implemented here without separate file) ─
-    if (verbose)
+    bool hasErrors = !lexErrs1.empty() || !parseErrs1.empty() || !cgErrs1.empty();
+
+    // ── If no errors, compile normally ────────────────────────
+    if (!hasErrors) {
+        return compileSinglePass(srcPath, source, outDir, stem,
+                                 debugMode, buildBinaries, verbose,
+                                 optLevel, showIrDiff);
+    }
+
+    // ── Errors found but autocorrect disabled ─────────────────
+    if (!autoCorrect) {
+        if (verbose) reportErrors(srcPath, lexErrs1, parseErrs1, cgErrs1);
+        CompileResult bad;
+        bad.errorCount = (int)lexErrs1.size() + (int)parseErrs1.size() + (int)cgErrs1.size();
+        return bad;
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    //  AUTO-CORRECTION PHASE
+    // ═══════════════════════════════════════════════════════════
+    if (verbose) {
+        std::cout << BOLD << "\n══ PASS 1: Errors detected ══\n" << RESET;
+        reportErrors(srcPath, lexErrs1, parseErrs1, cgErrs1);
         std::cout << "\n" << YELLOW << BOLD
                   << "══ AUTO-CORRECTION PHASE ══\n" << RESET
-                  << "Fixing " << (lexErrs1.size()+parseErrs1.size()+cgErrs1.size())
+                  << "  Attempting to fix "
+                  << (lexErrs1.size() + parseErrs1.size() + cgErrs1.size())
                   << " error(s)...\n";
+    }
 
-    // Split source into lines
-    std::vector<std::string> lines;
-    { std::istringstream ss(source); std::string ln; while (std::getline(ss, ln)) lines.push_back(ln); }
+    // Delegate all fixing to the AutoCorrector class
+    AutoCorrector corrector(source, lexErrs1, parseErrs1, cgErrs1);
+    std::string corrected = corrector.correct();
 
-    struct Fix { int line; std::string kind, desc, before, after; };
-    std::vector<Fix> fixes;
-    auto trimR = [](const std::string& s) {
-        size_t e = s.find_last_not_of(" \t\r"); return e==std::string::npos?"":s.substr(0,e+1); };
+    const auto& fixes = corrector.getCorrections();
 
-    // Apply parse error fixes
-    for (const auto& err : parseErrs1) {
-        int li = std::max(0, err.line - 1);
-        if (li >= (int)lines.size()) li = (int)lines.size()-1;
-        const std::string& m = err.message;
+    // ── Print correction report ───────────────────────────────
+    if (verbose) {
+        if (fixes.empty()) {
+            std::cout << YELLOW << "  No automatic fixes could be applied.\n" << RESET;
+        } else {
+            std::cout << "\n" << YELLOW << BOLD
+                      << "╔══════════════════════════════════════════════════════════╗\n"
+                      << "║              AUTO-CORRECTION REPORT                     ║\n"
+                      << "╚══════════════════════════════════════════════════════════╝\n"
+                      << RESET
+                      << "  " << fixes.size() << " fix(es) applied.\n\n";
 
-        if (m.find("Missing ';'") != std::string::npos) {
-            std::string tr = trimR(lines[li]);
-            if (!tr.empty() && tr.back()!=';' && tr.back()!='{' && tr.back()!='}') {
-                std::string bef = lines[li];
-                // Insert ; before any trailing inline comment
-                size_t cmt = tr.find("//");
-                if (cmt != std::string::npos)
-                    lines[li] = trimR(tr.substr(0, cmt)) + "; " + tr.substr(cmt); // fallback below
-                else if (tr.find("/*") != std::string::npos) {
-                    size_t cp = tr.find("/*");
-                    lines[li] = tr.substr(0,cp-1)+";"+" "+tr.substr(cp);
-                } else
-                    lines[li] = tr + ";";
-                fixes.push_back({err.line,"PARSE","Added ';'",bef,lines[li]});
-            }
-        }
-        else if (m.find("Missing '}'") != std::string::npos) {
-            lines.insert(lines.begin()+li+1, "}");
-            fixes.push_back({err.line,"PARSE","Inserted missing '}'","","}"});
-        }
-        else if (m.find("Missing ')'") != std::string::npos) {
-            std::string tr = trimR(lines[li]);
-            if (!tr.empty()) {
-                std::string bef = lines[li];
-                lines[li] = tr.back()==';' ? tr.substr(0,tr.size()-1)+");" : tr+")";
-                fixes.push_back({err.line,"PARSE","Added ')'",bef,lines[li]});
-            }
-        }
-        else if (m.find("Expected '{'") != std::string::npos) {
-            std::string tr = trimR(lines[li]);
-            if (!tr.empty() && tr.back()!='{') {
-                std::string bef = lines[li];
-                lines[li] = tr + " {";
-                fixes.push_back({err.line,"PARSE","Added '{'",bef,lines[li]});
+            for (size_t i = 0; i < fixes.size(); i++) {
+                const auto& f = fixes[i];
+                std::cout << CYAN << "  [" << (i+1) << "] [" << f.kind << "] line "
+                          << f.line << " — " << f.description << RESET << "\n";
+                if (!f.before.empty())
+                    std::cout << "       " << RED   << "- " << f.before << RESET << "\n";
+                if (!f.after.empty())
+                    std::cout << "       " << GREEN << "+ " << f.after  << RESET << "\n";
             }
         }
     }
 
-    // Apply lex error fixes
-    for (const auto& err : lexErrs1) {
-        int li = std::max(0, err.line-1);
-        static const std::string tag = "Unknown character '";
-        size_t p = err.message.find(tag);
-        if (p != std::string::npos) {
-            char bad = err.message[p+tag.size()];
-            std::string& ln = lines[li];
-            size_t cp = ln.find(bad);
-            if (cp != std::string::npos) {
-                std::string bef = ln; ln.erase(cp,1);
-                fixes.push_back({err.line,"LEX","Removed '"+std::string(1,bad)+"'",bef,ln});
-            }
-        }
-        if (err.message.find("Unterminated block comment") != std::string::npos) {
-            std::string bef = lines.back(); lines.back() += " */";
-            fixes.push_back({(int)lines.size(),"LEX","Closed block comment",bef,lines.back()});
-        }
-    }
-
-    // Codegen fixes: declare undeclared variables
-    for (const auto& err : cgErrs1) {
-        static const std::vector<std::string> cgTags = {
-            "Use of undeclared variable '","Assignment to undeclared variable '"};
-        for (const auto& tag : cgTags) {
-            size_t p = err.message.find(tag);
-            if (p != std::string::npos) {
-                size_t s = p+tag.size(), e = err.message.find("'",s);
-                if (e != std::string::npos) {
-                    std::string name = err.message.substr(s, e-s);
-                    // Find first opening brace
-                    for (int i=0;i<(int)lines.size();i++) {
-                        if (lines[i].find('{') != std::string::npos) {
-                            std::string decl = "    int " + name + ";  /* auto-declared */";
-                            lines.insert(lines.begin()+i+1, decl);
-                            fixes.push_back({i+1,"CGEN","Declared 'int "+name+"'","",decl});
-                            break;
-                        }
-                    }
-                }
-                break;
-            }
-        }
-    }
-
-    // Rebuild corrected source
-    std::string corrected;
-    for (size_t i=0;i<lines.size();i++) { corrected += lines[i]; if (i+1<lines.size()) corrected+="\n"; }
-
-    // Print correction report
-    if (verbose && !fixes.empty()) {
-        std::cout << "\n" << YELLOW << BOLD
-                  << "╔══════════════════════════════════════════════════════════╗\n"
-                  << "║              AUTO-CORRECTION REPORT                     ║\n"
-                  << "╚══════════════════════════════════════════════════════════╝\n"
-                  << RESET
-                  << "  " << fixes.size() << " fix(es) applied.\n\n";
-        for (size_t i=0;i<fixes.size();i++) {
-            const auto& f = fixes[i];
-            std::cout << CYAN << "  [" << (i+1) << "] [" << f.kind << "] line " << f.line
-                      << " — " << f.desc << RESET << "\n";
-            if (!f.before.empty()) std::cout << "       " << RED   << "- " << f.before << RESET << "\n";
-            if (!f.after.empty())  std::cout << "       " << GREEN << "+ " << f.after  << RESET << "\n";
-        }
-    }
-
-    // Write corrected file
+    // ── Write corrected file ──────────────────────────────────
     std::string corrPath = outDir + "/" + stem + "_corrected.mc";
-    { std::ofstream o(corrPath); if (o) o << corrected; }
+    {
+        std::ofstream o(corrPath);
+        if (o) o << corrected;
+        else if (verbose)
+            std::cerr << RED << "  Warning: could not write corrected file to "
+                      << corrPath << RESET << "\n";
+    }
+
     if (verbose) {
         std::cout << "\n" << YELLOW << "  Corrected file: " << corrPath << RESET << "\n";
 
-        // Show corrected source with line numbers
-        std::cout << "\n" << BLUE << BOLD
-                  << "══ CORRECTED SOURCE ══\n" << RESET;
-        std::istringstream crs(corrected); std::string cln; int ln=1;
+        // Show corrected source with highlighted changed lines
+        std::cout << "\n" << BLUE << BOLD << "══ CORRECTED SOURCE ══\n" << RESET;
+        std::istringstream crs(corrected);
+        std::string cln;
+        int ln = 1;
         while (std::getline(crs, cln)) {
             bool isFix = false;
-            for (auto& f : fixes) if (f.line==ln) { isFix=true; break; }
+            for (const auto& f : fixes)
+                if (f.line == ln) { isFix = true; break; }
             std::cout << (isFix ? std::string(GREEN) : std::string(DIM))
                       << std::setw(4) << ln++ << RESET << " │ " << cln << "\n";
         }
     }
 
-    // ── PASS 2: compile corrected source ──────────────────────
+    // ── PASS 2: compile the corrected source ──────────────────
     if (verbose)
         std::cout << "\n" << BOLD << "══ PASS 2: Compiling corrected source ══\n" << RESET;
+
+    // Verify the corrected source actually compiles before proceeding
+    {
+        Lexer lxCheck(corrected, false);
+        auto toksCheck    = lxCheck.tokenize();
+        auto lexErrsCheck = lxCheck.getErrors();
+        Parser pxCheck(toksCheck);
+        auto astCheck       = pxCheck.parse();
+        auto parseErrsCheck = pxCheck.getErrors();
+        std::vector<CodeGenError> cgErrsCheck;
+        if (lexErrsCheck.empty() && parseErrsCheck.empty() && astCheck) {
+            CodeGen cgCheck;
+            cgCheck.generate(astCheck.get());
+            cgErrsCheck = cgCheck.getErrors();
+        }
+        bool stillErrors = !lexErrsCheck.empty() || !parseErrsCheck.empty() || !cgErrsCheck.empty();
+        if (stillErrors && verbose) {
+            std::cerr << YELLOW << "  Warning: corrected source still has errors:\n" << RESET;
+            reportErrors(corrPath, lexErrsCheck, parseErrsCheck, cgErrsCheck);
+        }
+    }
 
     auto r2 = compileSinglePass(corrPath, corrected, outDir, stem + "_corrected",
                                 debugMode, buildBinaries, verbose,
@@ -713,7 +646,7 @@ int main(int argc, char* argv[]) {
     bool        testAll     = false;
     bool        autoCorrect = true;
     bool        showIrDiff  = false;
-    OptLevel    optLevel    = OptLevel::O2;   // default: O2
+    OptLevel    optLevel    = OptLevel::O2;
     std::string testDir     = "test";
     std::string outDir      = "out";
     std::string inputFile;
