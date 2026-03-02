@@ -2,6 +2,15 @@
 
 A hand-written compiler for a C-like language that targets LLVM IR.
 
+Type this command to use llvm -
+sudo apt update
+sudo apt install -y \
+  llvm \
+  llvm-dev \
+  llvm-runtime \
+  llvm-tools \
+  clang
+
 ## Language Features
 
 | Feature | Example |
