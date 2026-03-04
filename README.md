@@ -2,6 +2,19 @@
 
 A hand-written compiler for a C-like language that targets LLVM IR.
 
+Command to execute before cloning the project -
+
+sudo apt-get update
+sudo apt-get install build-essential
+sudo apt-get install cmake ninja-build
+
+sudo apt-get install llvm-dev llvm-tools clang clang-dev
+# or for a specific version, e.g., LLVM 14:
+sudo apt-get install llvm-14-dev llvm-14-tools clang-14 clang-14-dev
+sudo apt-get install zlib1g-dev python3
+
+
+
 ## Language Features
 
 | Feature | Example |
@@ -73,9 +86,9 @@ this.method(args);  // call another method on the same object
 ---
 
 ## Build
-
+Inside build folder in root directory
 ```bash
-mkdir build && cd build
+rm -rf *
 cmake ..
 make -j$(nproc)
 ```
