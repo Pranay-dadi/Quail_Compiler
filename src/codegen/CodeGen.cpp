@@ -20,7 +20,8 @@
 // ── Constructor ────────────────────────────────────────────────
 CodeGen::CodeGen()
     : builder(context),
-      module(std::make_unique<llvm::Module>("quail", context)) {}
+      module(std::make_unique<llvm::Module>("quail", context)),
+      currentThisAlloca(nullptr) {}
 
 // ── Error helper ──────────────────────────────────────────────
 void CodeGen::addError(const std::string& msg) {
@@ -28,11 +29,10 @@ void CodeGen::addError(const std::string& msg) {
     errors.push_back({msg});
 }
 
-// ════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════
 //  Type helpers
-// ════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════
 
-// Map ASTType → LLVM type
 llvm::Type* CodeGen::llvmType(ASTType t) {
     switch (t) {
         case ASTType::Float:   return llvm::Type::getDoubleTy(context);
@@ -42,7 +42,6 @@ llvm::Type* CodeGen::llvmType(ASTType t) {
     }
 }
 
-// Map ValueType (SymbolTable) → LLVM type
 llvm::Type* CodeGen::llvmType(ValueType t) {
     switch (t) {
         case ValueType::Float:  return llvm::Type::getDoubleTy(context);
@@ -52,7 +51,6 @@ llvm::Type* CodeGen::llvmType(ValueType t) {
     }
 }
 
-// Convert ASTType → ValueType for SymbolTable insertion
 static ValueType astToValueType(ASTType t) {
     switch (t) {
         case ASTType::Float:   return ValueType::Float;
@@ -62,63 +60,41 @@ static ValueType astToValueType(ASTType t) {
     }
 }
 
-// ── Coerce a value to the target LLVM type ────────────────────
-// Handles int↔float promotion/truncation transparently.
+// ── Coerce value to target type ───────────────────────────────
 llvm::Value* CodeGen::coerce(llvm::Value* val, llvm::Type* targetTy) {
     if (!val || !targetTy) return val;
     llvm::Type* srcTy = val->getType();
     if (srcTy == targetTy) return val;
-
-    // i1 → i32
     if (srcTy->isIntegerTy(1) && targetTy->isIntegerTy(32))
         return builder.CreateZExt(val, targetTy, "bool_to_int");
-
-    // i1 → double
     if (srcTy->isIntegerTy(1) && targetTy->isDoubleTy())
         return builder.CreateUIToFP(val, targetTy, "bool_to_fp");
-
-    // i32 → double  (int → float promotion)
     if (srcTy->isIntegerTy(32) && targetTy->isDoubleTy())
         return builder.CreateSIToFP(val, targetTy, "int_to_fp");
-
-    // double → i32  (float → int truncation)
     if (srcTy->isDoubleTy() && targetTy->isIntegerTy(32))
         return builder.CreateFPToSI(val, targetTy, "fp_to_int");
-
-    // i32 → i1  (for branch conditions from int)
     if (srcTy->isIntegerTy(32) && targetTy->isIntegerTy(1))
         return builder.CreateICmpNE(val,
             llvm::ConstantInt::get(llvm::Type::getInt32Ty(context), 0), "int_to_bool");
-
-    // Fallthrough: return as-is (let LLVM catch the mismatch)
-    addError("Type mismatch: cannot coerce '" +
-             std::string(srcTy->isIntegerTy() ? "int" : "float") + "' to target type");
+    addError("Type mismatch: cannot coerce types");
     return val;
 }
 
-// ── Promote both operands to a common numeric type ─────────────
-// Rule: if either is double, both become double; otherwise both stay i32.
+// ── Promote both operands to common type ──────────────────────
 std::pair<llvm::Value*, llvm::Value*>
 CodeGen::promoteToCommon(llvm::Value* lhs, llvm::Value* rhs) {
     if (!lhs || !rhs) return {lhs, rhs};
-
     auto* i32 = llvm::Type::getInt32Ty(context);
     auto* f64 = llvm::Type::getDoubleTy(context);
-
-    // Unwrap i1 on both sides first
     if (lhs->getType()->isIntegerTy(1)) lhs = builder.CreateZExt(lhs, i32);
     if (rhs->getType()->isIntegerTy(1)) rhs = builder.CreateZExt(rhs, i32);
-
     bool lhsFloat = lhs->getType()->isDoubleTy();
     bool rhsFloat = rhs->getType()->isDoubleTy();
-
     if (lhsFloat && !rhsFloat) rhs = builder.CreateSIToFP(rhs, f64, "promote_rhs");
     if (!lhsFloat && rhsFloat) lhs = builder.CreateSIToFP(lhs, f64, "promote_lhs");
-
     return {lhs, rhs};
 }
 
-// ── IR string capture ─────────────────────────────────────────
 std::string CodeGen::getIRString() const {
     std::string s;
     llvm::raw_string_ostream os(s);
@@ -126,7 +102,6 @@ std::string CodeGen::getIRString() const {
     return s;
 }
 
-// ── Optimization statistics ───────────────────────────────────
 void CodeGen::collectStats(OptStats::FuncStat& fs, llvm::Function& fn, bool before) {
     size_t instrs = 0, blocks = 0;
     for (auto& bb : fn) { ++blocks; for (auto& i : bb) { (void)i; ++instrs; } }
@@ -134,10 +109,8 @@ void CodeGen::collectStats(OptStats::FuncStat& fs, llvm::Function& fn, bool befo
     else        { fs.instrAfter   = instrs; fs.blocksAfter  = blocks; }
 }
 
-// ── Optimize ──────────────────────────────────────────────────
 void CodeGen::optimize(OptLevel level) {
     if (!module || level == OptLevel::O0) return;
-
     optStats = OptStats{};
     for (auto& fn : *module) {
         if (fn.isDeclaration()) continue;
@@ -148,19 +121,16 @@ void CodeGen::optimize(OptLevel level) {
         optStats.totalBlocksBefore += fs.blocksBefore;
         optStats.functions.push_back(fs);
     }
-
     llvm::PassBuilder            PB;
     llvm::LoopAnalysisManager    LAM;
     llvm::FunctionAnalysisManager FAM;
     llvm::CGSCCAnalysisManager   CGAM;
     llvm::ModuleAnalysisManager  MAM;
-
     PB.registerModuleAnalyses(MAM);
     PB.registerCGSCCAnalyses(CGAM);
     PB.registerFunctionAnalyses(FAM);
     PB.registerLoopAnalyses(LAM);
     PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
-
     if (level == OptLevel::O1) {
         llvm::ModulePassManager  MPM;
         llvm::FunctionPassManager FPM;
@@ -178,7 +148,6 @@ void CodeGen::optimize(OptLevel level) {
         auto MPM = PB.buildPerModuleDefaultPipeline(llvm::OptimizationLevel::O3);
         MPM.run(*module, MAM);
     }
-
     size_t fi = 0;
     for (auto& fn : *module) {
         if (fn.isDeclaration()) continue;
@@ -191,9 +160,143 @@ void CodeGen::optimize(OptLevel level) {
     }
 }
 
-// ════════════════════════════════════════════════════════════════
-//  Code generation
-// ════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════
+//  OOP helpers — GEP construction
+// ══════════════════════════════════════════════════════════════
+
+llvm::Value* CodeGen::fieldGEPFromPtr(llvm::StructType* structTy,
+                                       llvm::Value*      objPtr,
+                                       int               fieldIdx,
+                                       const std::string& tag)
+{
+    auto* zero = llvm::ConstantInt::get(llvm::Type::getInt32Ty(context), 0);
+    auto* fidx = llvm::ConstantInt::get(llvm::Type::getInt32Ty(context), fieldIdx);
+    return builder.CreateGEP(structTy, objPtr, {zero, fidx}, tag);
+}
+
+llvm::Value* CodeGen::fieldGEP(const Symbol* sym,
+                                const std::string& fieldName,
+                                const std::string& tag)
+{
+    auto it = classInfos.find(sym->objectClass);
+    if (it == classInfos.end()) {
+        addError("Unknown class '" + sym->objectClass + "'");
+        return nullptr;
+    }
+    int idx = it->second.fieldIndex(fieldName);
+    if (idx < 0) {
+        addError("Class '" + sym->objectClass + "' has no field '" + fieldName + "'");
+        return nullptr;
+    }
+    return fieldGEPFromPtr(it->second.llvmType, sym->value, idx,
+                           tag.empty() ? sym->name + "." + fieldName : tag);
+}
+
+// ══════════════════════════════════════════════════════════════
+//  OOP — method generation
+//
+//  Methods are compiled as:
+//    define RetType @ClassName_methodName(%ClassName* %this_arg, params...) { ... }
+//
+//  Inside the body:
+//    currentClassName  = class name (for this.field lookups)
+//    currentThisAlloca = alloca of %ClassName* (holds the this pointer)
+// ══════════════════════════════════════════════════════════════
+
+void CodeGen::generateMethod(FunctionAST* f,
+                              const std::string& className,
+                              llvm::StructType*  structTy)
+{
+    // Build LLVM parameter list: (ClassName* this_arg, param0, param1, ...)
+    auto* structPtrTy = llvm::PointerType::get(structTy, 0);
+
+    std::vector<llvm::Type*> paramTypes;
+    std::vector<ValueType>   paramVT;
+    paramTypes.push_back(structPtrTy);          // implicit this*
+    paramVT.push_back(ValueType::Unknown);      // placeholder
+
+    for (size_t i = 0; i < f->proto->args.size(); ++i) {
+        ASTType at = (i < f->proto->argTypes.size())
+                     ? f->proto->argTypes[i]
+                     : ASTType::Int;
+        paramTypes.push_back(llvmType(at));
+        paramVT.push_back(astToValueType(at));
+    }
+
+    llvm::Type* retTy      = llvmType(f->proto->returnType);
+    auto*       ft         = llvm::FunctionType::get(retTy, paramTypes, false);
+    std::string mangledName = className + "_" + f->proto->name;
+
+    auto* fn = llvm::Function::Create(ft,
+                   llvm::Function::ExternalLinkage, mangledName, *module);
+
+    // Register method as a function symbol at global scope
+    std::vector<ValueType> regParams(paramVT.begin() + 1, paramVT.end());
+    try {
+        symbols.insertFunction(mangledName,
+                               astToValueType(f->proto->returnType),
+                               regParams, fn);
+    } catch (...) { /* redefinition guard — ignore duplicate */ }
+
+    auto* entry = llvm::BasicBlock::Create(context, "entry", fn);
+    builder.SetInsertPoint(entry);
+    symbols.enterScope();
+    symbols.setCurrentFunction(mangledName);
+
+    // ── Alloca for 'this' pointer ──────────────────────────────
+    auto argIt = fn->args().begin();
+    argIt->setName("this_arg");
+
+    auto* thisPtrAlloca = builder.CreateAlloca(structPtrTy, nullptr, "this.addr");
+    builder.CreateStore(&*argIt, thisPtrAlloca);
+    currentThisAlloca = thisPtrAlloca;
+    ++argIt;
+
+    // ── Alloca for explicit parameters ─────────────────────────
+    size_t idx = 0;
+    for (auto it = argIt; it != fn->args().end(); ++it, ++idx) {
+        // Guard: proto->args may be shorter than LLVM's arg list if something
+        // went wrong during codegen setup — avoid out-of-bounds UB.
+        if (idx >= f->proto->args.size()) {
+            addError("generateMethod '" + mangledName +
+                     "': LLVM arg count exceeds prototype arg count");
+            break;
+        }
+        const std::string& pname = f->proto->args[idx];
+        ASTType at = (idx < f->proto->argTypes.size())
+                     ? f->proto->argTypes[idx]
+                     : ASTType::Int;
+        auto* alloc = builder.CreateAlloca(llvmType(at), nullptr, pname);
+        builder.CreateStore(&*it, alloc);
+        try {
+            symbols.insert(pname, astToValueType(at), SymbolKind::Parameter, alloc);
+        } catch (const std::runtime_error& e) { addError(e.what()); }
+        (void)idx; // idx is incremented by the for-header; suppress unused-value warning
+    }
+
+    // ── Generate body ──────────────────────────────────────────
+    generate(f->body.get());
+
+    // ── Auto return if missing ─────────────────────────────────
+    if (!builder.GetInsertBlock()->getTerminator()) {
+        if (retTy->isVoidTy())       builder.CreateRetVoid();
+        else if (retTy->isDoubleTy()) builder.CreateRet(llvm::ConstantFP::get(retTy, 0.0));
+        else                          builder.CreateRet(llvm::ConstantInt::get(retTy, 0));
+    }
+
+    currentThisAlloca = nullptr;
+    symbols.clearCurrentFunction();
+    symbols.exitScope();
+
+    std::string errStr;
+    llvm::raw_string_ostream errStream(errStr);
+    if (llvm::verifyFunction(*fn, &errStream))
+        addError("IR verify failed for '" + mangledName + "': " + errStream.str());
+}
+
+// ══════════════════════════════════════════════════════════════
+//  Main code generation dispatcher
+// ══════════════════════════════════════════════════════════════
 
 llvm::Value* CodeGen::generate(AST* node) {
     if (!node) {
@@ -201,9 +304,224 @@ llvm::Value* CodeGen::generate(AST* node) {
         return nullptr;
     }
 
-    // ── Comments: no IR ────────────────────────────────────────
+    // ── Comments ───────────────────────────────────────────────
     if (dynamic_cast<LineCommentAST*>(node))  return nullptr;
     if (dynamic_cast<BlockCommentAST*>(node)) return nullptr;
+
+    // ════════════════════════════════════════════════════════════
+    //  OOP — Class declaration
+    //  Registers the struct type and generates all methods.
+    // ════════════════════════════════════════════════════════════
+    if (auto* cls = dynamic_cast<ClassDeclAST*>(node)) {
+        // Build LLVM struct field types
+        std::vector<llvm::Type*> fieldLLVMTypes;
+        ClassInfo info;
+        info.name = cls->name;
+
+        for (auto& f : cls->fields) {
+            fieldLLVMTypes.push_back(llvmType(f.type));
+            info.fields.push_back({f.name, astToValueType(f.type)});
+        }
+
+        auto* structTy = llvm::StructType::create(context, fieldLLVMTypes, cls->name);
+        info.llvmType  = structTy;
+        classTypes[cls->name]  = structTy;
+        classInfos[cls->name]  = info;
+
+        // Generate each method
+        currentClassName = cls->name;
+        for (auto& method : cls->methods)
+            generateMethod(method.get(), cls->name, structTy);
+        currentClassName.clear();
+
+        return nullptr;
+    }
+
+    // ════════════════════════════════════════════════════════════
+    //  OOP — Object declaration  (ClassName varName;)
+    // ════════════════════════════════════════════════════════════
+    if (auto* od = dynamic_cast<ObjectDeclAST*>(node)) {
+        auto it = classTypes.find(od->className);
+        if (it == classTypes.end()) {
+            addError("Unknown class '" + od->className + "'");
+            return nullptr;
+        }
+        if (symbols.isDeclaredInCurrentScope(od->varName)) {
+            addError("Redeclaration of '" + od->varName + "' in same scope");
+            return nullptr;
+        }
+        auto* alloc = builder.CreateAlloca(it->second, nullptr, od->varName);
+        // Zero-initialize all fields (mirrors Java/C# default field values).
+        // Without this, any field read before an explicit setter call yields UB.
+        builder.CreateStore(llvm::Constant::getNullValue(it->second), alloc);
+        try {
+            symbols.insert(od->varName, ValueType::Unknown, SymbolKind::Object,
+                           alloc, 0, od->className);
+        } catch (const std::runtime_error& e) { addError(e.what()); }
+        return alloc;
+    }
+
+    // ════════════════════════════════════════════════════════════
+    //  OOP — Member access  (obj.field  in expression)
+    // ════════════════════════════════════════════════════════════
+    if (auto* ma = dynamic_cast<MemberAccessAST*>(node)) {
+        const Symbol* sym = symbols.lookup(ma->objName);
+        if (!sym) { addError("Use of undeclared object '" + ma->objName + "'"); return nullptr; }
+        if (sym->kind != SymbolKind::Object) {
+            addError("'" + ma->objName + "' is not an object"); return nullptr;
+        }
+        auto it = classInfos.find(sym->objectClass);
+        if (it == classInfos.end()) { addError("Unknown class '" + sym->objectClass + "'"); return nullptr; }
+
+        int idx = it->second.fieldIndex(ma->memberName);
+        if (idx < 0) {
+            addError("'" + sym->objectClass + "' has no field '" + ma->memberName + "'");
+            return nullptr;
+        }
+        auto* gep = fieldGEPFromPtr(it->second.llvmType, sym->value, idx,
+                                    ma->objName + "." + ma->memberName + ".ptr");
+        ValueType ft = it->second.fieldType(ma->memberName);
+        return builder.CreateLoad(llvmType(ft), gep, ma->memberName);
+    }
+
+    // ════════════════════════════════════════════════════════════
+    //  OOP — Member assign  (obj.field = expr;)
+    // ════════════════════════════════════════════════════════════
+    if (auto* ma = dynamic_cast<MemberAssignAST*>(node)) {
+        const Symbol* sym = symbols.lookup(ma->objName);
+        if (!sym) { addError("Assignment to undeclared object '" + ma->objName + "'"); return nullptr; }
+        if (sym->kind != SymbolKind::Object) {
+            addError("'" + ma->objName + "' is not an object"); return nullptr;
+        }
+        auto it = classInfos.find(sym->objectClass);
+        if (it == classInfos.end()) { addError("Unknown class '" + sym->objectClass + "'"); return nullptr; }
+
+        int idx = it->second.fieldIndex(ma->memberName);
+        if (idx < 0) {
+            addError("'" + sym->objectClass + "' has no field '" + ma->memberName + "'");
+            return nullptr;
+        }
+        auto* val = generate(ma->expr.get());
+        if (!val) return nullptr;
+        ValueType ft  = it->second.fieldType(ma->memberName);
+        val = coerce(val, llvmType(ft));
+        auto* gep = fieldGEPFromPtr(it->second.llvmType, sym->value, idx,
+                                    ma->objName + "." + ma->memberName + ".ptr");
+        builder.CreateStore(val, gep);
+        return val;
+    }
+
+    // ════════════════════════════════════════════════════════════
+    //  OOP — Method call  (obj.method(args)  or  this.method(args))
+    // ════════════════════════════════════════════════════════════
+    if (auto* mc = dynamic_cast<MethodCallAST*>(node)) {
+        std::string className;
+        llvm::Value* thisPtr = nullptr;
+
+        if (mc->objName == "this") {
+            // Self-call inside a method
+            if (currentClassName.empty() || !currentThisAlloca) {
+                addError("'this' method call outside of a method");
+                return nullptr;
+            }
+            className = currentClassName;
+            auto* structPtrTy = llvm::PointerType::get(classTypes[className], 0);
+            thisPtr = builder.CreateLoad(structPtrTy, currentThisAlloca, "this");
+        } else {
+            const Symbol* sym = symbols.lookup(mc->objName);
+            if (!sym) { addError("Use of undeclared object '" + mc->objName + "'"); return nullptr; }
+            if (sym->kind != SymbolKind::Object) {
+                addError("'" + mc->objName + "' is not an object"); return nullptr;
+            }
+            className = sym->objectClass;
+            thisPtr   = sym->value;   // already a %ClassName*
+        }
+
+        std::string mangledName = className + "_" + mc->methodName;
+        auto* fn = module->getFunction(mangledName);
+        if (!fn) {
+            addError("Method '" + mc->methodName + "' not found in class '" + className + "'");
+            return nullptr;
+        }
+
+        // Build argument list: (this, arg0, arg1, ...)
+        size_t expectedArgs = fn->arg_size() - 1; // exclude implicit this
+        if (expectedArgs != mc->args.size()) {
+            addError("Wrong argument count to '" + className + "::" + mc->methodName +
+                     "': expected " + std::to_string(expectedArgs) +
+                     ", got " + std::to_string(mc->args.size()));
+            return nullptr;
+        }
+
+        std::vector<llvm::Value*> args;
+        args.push_back(thisPtr);
+        for (size_t pi = 0; pi < mc->args.size(); ++pi) {
+            auto* v = generate(mc->args[pi].get());
+            if (!v) return nullptr;
+            llvm::Type* expectedTy = fn->getFunctionType()->getParamType(pi + 1);
+            v = coerce(v, expectedTy);
+            args.push_back(v);
+        }
+
+        return builder.CreateCall(fn, args,
+               fn->getReturnType()->isVoidTy() ? "" : "call_" + mc->methodName);
+    }
+
+    // ════════════════════════════════════════════════════════════
+    //  OOP — this.field access  (inside a method)
+    // ════════════════════════════════════════════════════════════
+    if (auto* ta = dynamic_cast<ThisAccessAST*>(node)) {
+        if (!currentThisAlloca || currentClassName.empty()) {
+            addError("'this' used outside of a method");
+            return nullptr;
+        }
+        auto it = classInfos.find(currentClassName);
+        if (it == classInfos.end()) { addError("Unknown class '" + currentClassName + "'"); return nullptr; }
+
+        int idx = it->second.fieldIndex(ta->memberName);
+        if (idx < 0) {
+            addError("'" + currentClassName + "' has no field '" + ta->memberName + "'");
+            return nullptr;
+        }
+        auto* structPtrTy = llvm::PointerType::get(it->second.llvmType, 0);
+        auto* thisPtr     = builder.CreateLoad(structPtrTy, currentThisAlloca, "this");
+        auto* gep         = fieldGEPFromPtr(it->second.llvmType, thisPtr, idx,
+                                            "this." + ta->memberName + ".ptr");
+        ValueType ft      = it->second.fieldType(ta->memberName);
+        return builder.CreateLoad(llvmType(ft), gep, ta->memberName);
+    }
+
+    // ════════════════════════════════════════════════════════════
+    //  OOP — this.field = expr  (inside a method)
+    // ════════════════════════════════════════════════════════════
+    if (auto* ta = dynamic_cast<ThisAssignAST*>(node)) {
+        if (!currentThisAlloca || currentClassName.empty()) {
+            addError("'this' assignment outside of a method");
+            return nullptr;
+        }
+        auto it = classInfos.find(currentClassName);
+        if (it == classInfos.end()) { addError("Unknown class '" + currentClassName + "'"); return nullptr; }
+
+        int idx = it->second.fieldIndex(ta->memberName);
+        if (idx < 0) {
+            addError("'" + currentClassName + "' has no field '" + ta->memberName + "'");
+            return nullptr;
+        }
+        auto* val         = generate(ta->expr.get());
+        if (!val) return nullptr;
+        ValueType ft      = it->second.fieldType(ta->memberName);
+        val               = coerce(val, llvmType(ft));
+        auto* structPtrTy = llvm::PointerType::get(it->second.llvmType, 0);
+        auto* thisPtr     = builder.CreateLoad(structPtrTy, currentThisAlloca, "this");
+        auto* gep         = fieldGEPFromPtr(it->second.llvmType, thisPtr, idx,
+                                            "this." + ta->memberName + ".ptr");
+        builder.CreateStore(val, gep);
+        return val;
+    }
+
+    // ════════════════════════════════════════════════════════════
+    //  Existing non-OOP nodes below (unchanged from v2.0)
+    // ════════════════════════════════════════════════════════════
 
     // ── Integer literal ────────────────────────────────────────
     if (auto* n = dynamic_cast<NumberAST*>(node))
@@ -216,47 +534,54 @@ llvm::Value* CodeGen::generate(AST* node) {
     // ── Variable reference ─────────────────────────────────────
     if (auto* v = dynamic_cast<VariableAST*>(node)) {
         const Symbol* sym = symbols.lookup(v->name);
-        if (!sym) {
-            addError("Use of undeclared variable '" + v->name + "'");
-            return nullptr;
-        }
+        if (!sym) { addError("Use of undeclared variable '" + v->name + "'"); return nullptr; }
         if (sym->kind == SymbolKind::Function) {
-            addError("'" + v->name + "' is a function, not a variable");
-            return nullptr;
+            addError("'" + v->name + "' is a function, not a variable"); return nullptr;
         }
-        // Load using the symbol's declared type
-        llvm::Type* ty = llvmType(sym->type);
-        return builder.CreateLoad(ty, sym->value, v->name);
+        if (sym->kind == SymbolKind::Object) {
+            // Using an object as a value is not directly supported yet
+            addError("Cannot use object '" + v->name + "' as a scalar value"); return nullptr;
+        }
+        return builder.CreateLoad(llvmType(sym->type), sym->value, v->name);
+    }
+
+    // ── Variable declaration with initializer (in-place, no child scope) ─────
+    // Handles:  int name = expr;
+    // This keeps 'name' alive in the current scope so subsequent statements
+    // (e.g. return name;) can see it — unlike the old BlockAST wrapper.
+    if (auto* vi = dynamic_cast<VarDeclInitAST*>(node)) {
+        if (symbols.isDeclaredInCurrentScope(vi->name)) {
+            addError("Redeclaration of '" + vi->name + "' in same scope"); return nullptr;
+        }
+        llvm::Type* ty    = llvmType(vi->type);
+        auto*       alloc = builder.CreateAlloca(ty, nullptr, vi->name);
+        try { symbols.insert(vi->name, astToValueType(vi->type), SymbolKind::Variable, alloc); }
+        catch (const std::runtime_error& e) { addError(e.what()); return nullptr; }
+        auto* initVal = generate(vi->init.get());
+        if (!initVal) return nullptr;
+        initVal = coerce(initVal, ty);
+        builder.CreateStore(initVal, alloc);
+        return alloc;
     }
 
     // ── Variable declaration ───────────────────────────────────
     if (auto* vd = dynamic_cast<VarDeclAST*>(node)) {
-        // Redeclaration check
         if (symbols.isDeclaredInCurrentScope(vd->name)) {
-            addError("Redeclaration of '" + vd->name + "' in same scope");
-            return nullptr;
+            addError("Redeclaration of '" + vd->name + "' in same scope"); return nullptr;
         }
         llvm::Type* ty    = llvmType(vd->type);
         auto*       alloc = builder.CreateAlloca(ty, nullptr, vd->name);
-        try {
-            symbols.insert(vd->name, astToValueType(vd->type),
-                           SymbolKind::Variable, alloc);
-        } catch (const std::runtime_error& e) {
-            addError(e.what());
-        }
+        try { symbols.insert(vd->name, astToValueType(vd->type), SymbolKind::Variable, alloc); }
+        catch (const std::runtime_error& e) { addError(e.what()); }
         return alloc;
     }
 
     // ── Assignment ─────────────────────────────────────────────
     if (auto* a = dynamic_cast<AssignAST*>(node)) {
         Symbol* sym = symbols.lookup(a->name);
-        if (!sym) {
-            addError("Assignment to undeclared variable '" + a->name + "'");
-            return nullptr;
-        }
+        if (!sym) { addError("Assignment to undeclared variable '" + a->name + "'"); return nullptr; }
         auto* val = generate(a->expr.get());
         if (!val) return nullptr;
-        // Coerce RHS to the variable's declared type
         val = coerce(val, llvmType(sym->type));
         if (!val) return nullptr;
         builder.CreateStore(val, sym->value);
@@ -267,7 +592,7 @@ llvm::Value* CodeGen::generate(AST* node) {
     if (auto* i = dynamic_cast<IfAST*>(node)) {
         auto* condVal = generate(i->cond.get());
         if (!condVal) return nullptr;
-        auto* cond = toBool(condVal);
+        auto* cond    = toBool(condVal);
         if (!cond) return nullptr;
         auto* fn      = builder.GetInsertBlock()->getParent();
         auto* thenBB  = llvm::BasicBlock::Create(context, "then",   fn);
@@ -342,33 +667,20 @@ llvm::Value* CodeGen::generate(AST* node) {
 
     // ── Function definition ────────────────────────────────────
     if (auto* f = dynamic_cast<FunctionAST*>(node)) {
-        // Build param type list from prototype's argTypes
         std::vector<llvm::Type*> paramTypes;
         std::vector<ValueType>   paramVT;
         for (size_t i = 0; i < f->proto->args.size(); ++i) {
-            ASTType at = (i < f->proto->argTypes.size())
-                         ? f->proto->argTypes[i]
-                         : ASTType::Int;
+            ASTType at = (i < f->proto->argTypes.size()) ? f->proto->argTypes[i] : ASTType::Int;
             paramTypes.push_back(llvmType(at));
             paramVT.push_back(astToValueType(at));
         }
-
         llvm::Type* retTy = llvmType(f->proto->returnType);
-        auto*       ft    = llvm::FunctionType::get(retTy, paramTypes, false);
-        auto*       fn    = llvm::Function::Create(
-                                ft, llvm::Function::ExternalLinkage,
-                                f->proto->name, *module);
-
-        // Register function in symbol table
+        auto* ft  = llvm::FunctionType::get(retTy, paramTypes, false);
+        auto* fn  = llvm::Function::Create(ft, llvm::Function::ExternalLinkage,
+                                           f->proto->name, *module);
         try {
-            symbols.insertFunction(f->proto->name,
-                                   astToValueType(f->proto->returnType),
-                                   paramVT, fn);
-        } catch (const std::runtime_error& e) {
-            addError(e.what());
-            fn->eraseFromParent();
-            return nullptr;
-        }
+            symbols.insertFunction(f->proto->name, astToValueType(f->proto->returnType), paramVT, fn);
+        } catch (const std::runtime_error& e) { addError(e.what()); fn->eraseFromParent(); return nullptr; }
 
         auto* entry = llvm::BasicBlock::Create(context, "entry", fn);
         builder.SetInsertPoint(entry);
@@ -378,69 +690,47 @@ llvm::Value* CodeGen::generate(AST* node) {
         size_t idx = 0;
         for (auto& arg : fn->args()) {
             const std::string& pname = f->proto->args[idx];
-            ASTType at = (idx < f->proto->argTypes.size())
-                         ? f->proto->argTypes[idx]
-                         : ASTType::Int;
+            ASTType at = (idx < f->proto->argTypes.size()) ? f->proto->argTypes[idx] : ASTType::Int;
             auto* alloc = builder.CreateAlloca(llvmType(at), nullptr, pname);
             builder.CreateStore(&arg, alloc);
-            try {
-                symbols.insert(pname, astToValueType(at),
-                               SymbolKind::Parameter, alloc);
-            } catch (const std::runtime_error& e) {
-                addError(e.what());
-            }
+            try { symbols.insert(pname, astToValueType(at), SymbolKind::Parameter, alloc); }
+            catch (const std::runtime_error& e) { addError(e.what()); }
             idx++;
         }
 
         generate(f->body.get());
 
-        // Auto-add return if missing
         if (!builder.GetInsertBlock()->getTerminator()) {
-            if (retTy->isVoidTy())
-                builder.CreateRetVoid();
-            else if (retTy->isDoubleTy())
-                builder.CreateRet(llvm::ConstantFP::get(retTy, 0.0));
-            else
-                builder.CreateRet(llvm::ConstantInt::get(retTy, 0));
+            if (retTy->isVoidTy())        builder.CreateRetVoid();
+            else if (retTy->isDoubleTy()) builder.CreateRet(llvm::ConstantFP::get(retTy, 0.0));
+            else                          builder.CreateRet(llvm::ConstantInt::get(retTy, 0));
         }
 
         symbols.clearCurrentFunction();
         symbols.exitScope();
 
-        // Verify the function
         std::string errStr;
         llvm::raw_string_ostream errStream(errStr);
         if (llvm::verifyFunction(*fn, &errStream))
-            addError("LLVM IR verification failed for '" +
-                     f->proto->name + "': " + errStream.str());
+            addError("LLVM IR verify failed for '" + f->proto->name + "': " + errStream.str());
         return fn;
     }
 
     // ── Function call ──────────────────────────────────────────
     if (auto* c = dynamic_cast<CallAST*>(node)) {
-        // Look up in symbol table first (to get type info), then LLVM module
-        const Symbol* sym = symbols.lookup(c->callee);
-        auto*         fn  = module->getFunction(c->callee);
-
-        if (!fn) {
-            addError("Call to undefined function '" + c->callee + "'");
-            return nullptr;
-        }
+        auto* fn = module->getFunction(c->callee);
+        if (!fn) { addError("Call to undefined function '" + c->callee + "'"); return nullptr; }
         if (fn->arg_size() != c->args.size()) {
             addError("Wrong argument count to '" + c->callee + "': expected "
                      + std::to_string(fn->arg_size())
                      + ", got " + std::to_string(c->args.size()));
             return nullptr;
         }
-
         std::vector<llvm::Value*> args;
         size_t pi = 0;
         for (auto& a : c->args) {
-            auto* v = generate(a.get());
-            if (!v) return nullptr;
-            // Coerce each argument to the function's expected parameter type
-            llvm::Type* expectedTy = fn->getFunctionType()->getParamType(pi++);
-            v = coerce(v, expectedTy);
+            auto* v = generate(a.get()); if (!v) return nullptr;
+            v = coerce(v, fn->getFunctionType()->getParamType(pi++));
             args.push_back(v);
         }
         return builder.CreateCall(fn, args, fn->getReturnType()->isVoidTy() ? "" : "calltmp");
@@ -448,39 +738,25 @@ llvm::Value* CodeGen::generate(AST* node) {
 
     // ── Array declaration ──────────────────────────────────────
     if (auto* a = dynamic_cast<ArrayDeclAST*>(node)) {
-        if (a->size <= 0) {
-            addError("Array '" + a->name + "' has invalid size");
-            return nullptr;
-        }
+        if (a->size <= 0) { addError("Array '" + a->name + "' has invalid size"); return nullptr; }
         if (symbols.isDeclaredInCurrentScope(a->name)) {
-            addError("Redeclaration of array '" + a->name + "' in same scope");
-            return nullptr;
+            addError("Redeclaration of array '" + a->name + "' in same scope"); return nullptr;
         }
         llvm::Type* elemTy = llvmType(a->type);
         auto* arrTy  = llvm::ArrayType::get(elemTy, a->size);
         auto* alloc  = builder.CreateAlloca(arrTy, nullptr, a->name);
-        try {
-            symbols.insert(a->name, astToValueType(a->type),
-                           SymbolKind::Array, alloc, a->size);
-        } catch (const std::runtime_error& e) {
-            addError(e.what());
-        }
+        try { symbols.insert(a->name, astToValueType(a->type), SymbolKind::Array, alloc, a->size); }
+        catch (const std::runtime_error& e) { addError(e.what()); }
         return alloc;
     }
 
     // ── Array access ───────────────────────────────────────────
     if (auto* arr = dynamic_cast<ArrayAccessAST*>(node)) {
         const Symbol* sym = symbols.lookup(arr->name);
-        if (!sym) {
-            addError("Use of undeclared array '" + arr->name + "'");
-            return nullptr;
-        }
-        if (sym->kind != SymbolKind::Array) {
-            addError("'" + arr->name + "' is not an array");
-            return nullptr;
-        }
+        if (!sym) { addError("Use of undeclared array '" + arr->name + "'"); return nullptr; }
+        if (sym->kind != SymbolKind::Array) { addError("'" + arr->name + "' is not an array"); return nullptr; }
         auto* idx    = generate(arr->index.get()); if (!idx) return nullptr;
-        idx = coerce(idx, llvm::Type::getInt32Ty(context)); // index must be i32
+        idx = coerce(idx, llvm::Type::getInt32Ty(context));
         auto* alloca = llvm::cast<llvm::AllocaInst>(sym->value);
         auto* arrTy  = alloca->getAllocatedType();
         auto* zero   = llvm::ConstantInt::get(llvm::Type::getInt32Ty(context), 0);
@@ -491,18 +767,12 @@ llvm::Value* CodeGen::generate(AST* node) {
     // ── Array assign ───────────────────────────────────────────
     if (auto* aa = dynamic_cast<ArrayAssignAST*>(node)) {
         const Symbol* sym = symbols.lookup(aa->name);
-        if (!sym) {
-            addError("Assignment to undeclared array '" + aa->name + "'");
-            return nullptr;
-        }
-        if (sym->kind != SymbolKind::Array) {
-            addError("'" + aa->name + "' is not an array");
-            return nullptr;
-        }
+        if (!sym) { addError("Assignment to undeclared array '" + aa->name + "'"); return nullptr; }
+        if (sym->kind != SymbolKind::Array) { addError("'" + aa->name + "' is not an array"); return nullptr; }
         auto* idx = generate(aa->index.get()); if (!idx) return nullptr;
         idx = coerce(idx, llvm::Type::getInt32Ty(context));
         auto* val = generate(aa->expr.get());  if (!val) return nullptr;
-        val = coerce(val, llvmType(sym->type)); // coerce value to element type
+        val = coerce(val, llvmType(sym->type));
         auto* alloca = llvm::cast<llvm::AllocaInst>(sym->value);
         auto* arrTy  = alloca->getAllocatedType();
         auto* zero   = llvm::ConstantInt::get(llvm::Type::getInt32Ty(context), 0);
@@ -516,27 +786,20 @@ llvm::Value* CodeGen::generate(AST* node) {
         auto* lhs = generate(bin->lhs.get());
         auto* rhs = generate(bin->rhs.get());
         if (!lhs || !rhs) return nullptr;
-
-        // Load through any pointer (shouldn't normally occur in practice)
         if (lhs->getType()->isPointerTy())
             lhs = builder.CreateLoad(llvm::Type::getInt32Ty(context), lhs);
         if (rhs->getType()->isPointerTy())
             rhs = builder.CreateLoad(llvm::Type::getInt32Ty(context), rhs);
-
-        // Promote to common type (int+float → float+float)
         auto [l, r] = promoteToCommon(lhs, rhs);
         bool isFloat = l->getType()->isDoubleTy();
-
         if (bin->op == "+")  return isFloat ? builder.CreateFAdd(l,r,"fadd") : builder.CreateAdd(l,r,"add");
         if (bin->op == "-")  return isFloat ? builder.CreateFSub(l,r,"fsub") : builder.CreateSub(l,r,"sub");
         if (bin->op == "*")  return isFloat ? builder.CreateFMul(l,r,"fmul") : builder.CreateMul(l,r,"mul");
         if (bin->op == "/") {
             if (!isFloat) {
-                // Integer division by zero guard
-                auto* zero = llvm::ConstantInt::get(l->getType(), 0);
+                auto* zero  = llvm::ConstantInt::get(l->getType(), 0);
                 auto* isZero = builder.CreateICmpEQ(r, zero, "divzero");
-                // Replace zero divisor with 1 silently to avoid UB
-                auto* safeR = builder.CreateSelect(isZero,
+                auto* safeR  = builder.CreateSelect(isZero,
                     llvm::ConstantInt::get(l->getType(), 1), r, "safe_div");
                 return builder.CreateSDiv(l, safeR, "div");
             }
@@ -548,7 +811,6 @@ llvm::Value* CodeGen::generate(AST* node) {
         if (bin->op == ">=") return isFloat ? builder.CreateFCmpOGE(l,r,"fge") : builder.CreateICmpSGE(l,r,"ge");
         if (bin->op == "==") return isFloat ? builder.CreateFCmpOEQ(l,r,"feq") : builder.CreateICmpEQ(l,r,"eq");
         if (bin->op == "!=") return isFloat ? builder.CreateFCmpONE(l,r,"fne") : builder.CreateICmpNE(l,r,"ne");
-
         addError("Unknown binary operator '" + bin->op + "'");
         return nullptr;
     }
@@ -591,7 +853,6 @@ llvm::Value* CodeGen::generate(AST* node) {
             phi->addIncoming(rhsVal, rhsEnd);
             return phi;
         }
-        // == and != on logical values
         auto* lhs = generate(log->lhs.get());
         auto* rhs = generate(log->rhs.get());
         if (!lhs || !rhs) return nullptr;
@@ -621,15 +882,14 @@ llvm::Value* CodeGen::generate(AST* node) {
     if (auto* ret = dynamic_cast<ReturnAST*>(node)) {
         auto* fn    = builder.GetInsertBlock()->getParent();
         auto* retTy = fn->getReturnType();
-
         llvm::Value* val = nullptr;
         if (ret->expr) {
             val = generate(ret->expr.get()); if (!val) return nullptr;
             val = coerce(val, retTy);
         } else {
-            if (retTy->isVoidTy())   return builder.CreateRetVoid();
-            if (retTy->isDoubleTy()) val = llvm::ConstantFP::get(retTy, 0.0);
-            else                     val = llvm::ConstantInt::get(retTy, 0);
+            if (retTy->isVoidTy())    return builder.CreateRetVoid();
+            if (retTy->isDoubleTy())  val = llvm::ConstantFP::get(retTy, 0.0);
+            else                      val = llvm::ConstantInt::get(retTy, 0);
         }
         return builder.CreateRet(val);
     }
@@ -647,22 +907,17 @@ llvm::Value* CodeGen::generate(AST* node) {
     // ── Post-increment ─────────────────────────────────────────
     if (auto* inc = dynamic_cast<PostIncAST*>(node)) {
         Symbol* sym = symbols.lookup(inc->name);
-        if (!sym) {
-            addError("Use of undeclared variable '" + inc->name + "' in '++'");
-            return nullptr;
-        }
-        llvm::Type* ty  = llvmType(sym->type);
-        auto*       old = builder.CreateLoad(ty, sym->value, inc->name);
-        llvm::Value* one;
-        if (ty->isDoubleTy())
-            one = llvm::ConstantFP::get(ty, 1.0);
-        else
-            one = llvm::ConstantInt::get(ty, 1);
-        llvm::Value* incremented = ty->isDoubleTy()
-            ? builder.CreateFAdd(old, one, "finc")
-            : builder.CreateAdd(old, one, "inc");
+        if (!sym) { addError("Use of undeclared variable '" + inc->name + "' in '++'"); return nullptr; }
+        llvm::Type* ty   = llvmType(sym->type);
+        auto* old        = builder.CreateLoad(ty, sym->value, inc->name);
+        llvm::Value* one = ty->isDoubleTy()
+                           ? (llvm::Value*)llvm::ConstantFP::get(ty, 1.0)
+                           : (llvm::Value*)llvm::ConstantInt::get(ty, 1);
+        auto* incremented = ty->isDoubleTy()
+                            ? builder.CreateFAdd(old, one, "finc")
+                            : builder.CreateAdd(old, one, "inc");
         builder.CreateStore(incremented, sym->value);
-        return old; // post-increment returns old value
+        return old;
     }
 
     // ── Program ────────────────────────────────────────────────
@@ -690,7 +945,6 @@ llvm::Value* CodeGen::toBool(llvm::Value* v) {
     return nullptr;
 }
 
-// ── File / dump helpers ───────────────────────────────────────
 void CodeGen::dumpToFile(const std::string& filename) {
     std::error_code EC;
     llvm::raw_fd_ostream out(filename, EC);

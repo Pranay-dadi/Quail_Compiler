@@ -3,6 +3,7 @@
 #include "AST.h"
 #include <vector>
 #include <string>
+#include <set>
 
 struct ParseError {
     int         line;
@@ -22,13 +23,15 @@ private:
     size_t pos;
     std::vector<ParseError> errors;
 
+    // Known class names (populated as class declarations are parsed)
+    std::set<std::string> classNames;
+
     // ── helpers ───────────────────────────────────────────────
     void addError(const std::string& msg);
     int  currentLine() const;
     void syncStatement();
     void syncFunction();
 
-    // Consume any pending comment tokens and return them as AST nodes
     std::vector<std::unique_ptr<AST>> drainComments();
 
     // ── grammar ───────────────────────────────────────────────
@@ -37,7 +40,12 @@ private:
     std::unique_ptr<AST>         primary();
     std::unique_ptr<BlockAST>    block();
     std::unique_ptr<FunctionAST> function();
+    std::unique_ptr<ClassDeclAST> parseClass();   // NEW: class definition
     std::unique_ptr<AST>         parseExpression(int minPrec = 0);
     int                          getPrecedence(TokenType type);
     bool                         isComment(TokenType t) const;
+    bool                         isTypeKeyword(TokenType t) const;
+
+    // ── OOP argument list parser (shared by call / method call) ──
+    std::vector<std::unique_ptr<AST>> parseArgList();
 };

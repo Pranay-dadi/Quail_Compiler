@@ -11,7 +11,8 @@ enum class SymbolKind {
     Variable,
     Array,
     Function,
-    Parameter
+    Parameter,
+    Object       // class instance (stack-allocated struct)
 };
 
 // ── Value types ───────────────────────────────────────────────
@@ -30,13 +31,14 @@ struct Symbol {
     llvm::Value* value;
     int          arraySize      = 0;
     int          definedAtDepth = 0;
-    std::string  ownerFunction;   // which function this belongs to ("" = global)
+    std::string  ownerFunction;
+    std::string  objectClass;    // for kind==Object: the class name
 
     std::vector<ValueType> paramTypes;
     ValueType              returnType = ValueType::Int;
 };
 
-// ── Flat log entry (persists after scope exits) ───────────────
+// ── Flat log entry ────────────────────────────────────────────
 struct SymbolLogEntry {
     std::string  name;
     SymbolKind   kind;
@@ -44,8 +46,8 @@ struct SymbolLogEntry {
     int          arraySize      = 0;
     int          scopeDepth     = 0;
     std::string  ownerFunction;
+    std::string  objectClass;    // for kind==Object
 
-    // Function-specific
     std::vector<ValueType> paramTypes;
     ValueType              returnType = ValueType::Int;
 };
@@ -60,7 +62,6 @@ public:
     void exitScope();
     int  currentDepth() const { return (int)scopes.size() - 1; }
 
-    // Track which function we are currently inside (set by CodeGen)
     void setCurrentFunction(const std::string& fn) { currentFunction = fn; }
     void clearCurrentFunction()                     { currentFunction.clear(); }
     const std::string& getCurrentFunction() const   { return currentFunction; }
@@ -70,7 +71,8 @@ public:
                 ValueType          type,
                 SymbolKind         kind,
                 llvm::Value*       value,
-                int                arraySize = 0);
+                int                arraySize   = 0,
+                const std::string& objectClass = "");
 
     void insertFunction(const std::string&            name,
                         ValueType                     returnType,
@@ -94,14 +96,13 @@ public:
     static std::string typeName(ValueType t);
     static std::string kindName(SymbolKind k);
 
-    // ── Symbol log (all ever-inserted symbols, survives scope pops) ──
     const std::vector<SymbolLogEntry>& getLog() const { return log; }
 
 private:
     using Scope = std::unordered_map<std::string, Symbol>;
-    std::vector<Scope>      scopes;
+    std::vector<Scope>         scopes;
     std::vector<SymbolLogEntry> log;
-    std::string             currentFunction;
+    std::string                currentFunction;
 
     void appendLog(const Symbol& sym);
 };

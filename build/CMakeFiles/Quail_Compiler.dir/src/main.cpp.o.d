@@ -231,7 +231,9 @@ CMakeFiles/Quail_Compiler.dir/src/main.cpp.o: \
  /usr/include/c++/11/bits/atomic_base.h \
  /usr/include/c++/11/bits/atomic_lockfree_defines.h \
  /usr/include/c++/11/backward/auto_ptr.h \
- /usr/include/c++/11/pstl/glue_memory_defs.h \
+ /usr/include/c++/11/pstl/glue_memory_defs.h /usr/include/c++/11/set \
+ /usr/include/c++/11/bits/stl_tree.h /usr/include/c++/11/bits/stl_set.h \
+ /usr/include/c++/11/bits/stl_multiset.h \
  /home/pranaydadi/Documents/Quail_Compiler/include/codegen/CodeGen.h \
  /home/pranaydadi/Documents/Quail_Compiler/include/parser/AST.h \
  /home/pranaydadi/Documents/Quail_Compiler/include/semantic/SymbolTable.h \
@@ -351,9 +353,7 @@ CMakeFiles/Quail_Compiler.dir/src/main.cpp.o: \
  /usr/lib/llvm-14/include/llvm/Support/AllocatorBase.h \
  /usr/lib/llvm-14/include/llvm/IR/Attributes.h \
  /usr/lib/llvm-14/include/llvm/ADT/SmallString.h \
- /usr/include/c++/11/bitset /usr/include/c++/11/set \
- /usr/include/c++/11/bits/stl_tree.h /usr/include/c++/11/bits/stl_set.h \
- /usr/include/c++/11/bits/stl_multiset.h \
+ /usr/include/c++/11/bitset \
  /usr/lib/llvm-14/include/llvm/IR/Attributes.inc \
  /usr/lib/llvm-14/include/llvm/IR/CallingConv.h \
  /usr/lib/llvm-14/include/llvm/IR/Function.h \

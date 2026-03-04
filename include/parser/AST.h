@@ -5,8 +5,7 @@
 #include <vector>
 #include <iostream>
 
-// ── Language value types (mirrored from SymbolTable for AST use) ──
-// We redeclare here so AST.h has no dependency on LLVM headers.
+// ── Language value types ──────────────────────────────────────
 enum class ASTType {
     Int,
     Float,
@@ -135,14 +134,11 @@ struct ReturnAST : AST {
     }
 };
 
-// ── VarDeclAST now carries its declared type ──────────────────
 struct VarDeclAST : AST {
     std::string name;
-    ASTType     type;   // int or float
-
+    ASTType     type;
     explicit VarDeclAST(const std::string& n, ASTType t = ASTType::Int)
         : name(n), type(t) {}
-
     void print(int indent) const override {
         std::cout << std::string(indent, ' ')
                   << "VarDecl: " << astTypeName(type) << " " << name << "\n";
@@ -157,6 +153,23 @@ struct AssignAST : AST {
     void print(int indent) const override {
         std::cout << std::string(indent, ' ') << "Assignment: " << name << " =\n";
         if (expr) expr->print(indent + 4);
+    }
+};
+
+// Combined declare-and-initialize in the CURRENT scope (no child scope).
+// Replaces the old pattern of wrapping VarDecl+Assign in a BlockAST,
+// which erroneously destroyed the variable at the end of the inner block.
+// Example:  int result = obj.method();
+struct VarDeclInitAST : AST {
+    std::string          name;
+    ASTType              type;
+    std::unique_ptr<AST> init;
+    VarDeclInitAST(const std::string& n, ASTType t, std::unique_ptr<AST> e)
+        : name(n), type(t), init(std::move(e)) {}
+    void print(int indent) const override {
+        std::cout << std::string(indent, ' ')
+                  << "VarDeclInit: " << astTypeName(type) << " " << name << " =\n";
+        if (init) init->print(indent + 4);
     }
 };
 
@@ -220,17 +233,15 @@ struct ContinueAST : AST {
 };
 
 // ─────────────────────────────────────────────────────────────
-//  Array declarations — now carry element type
+//  Arrays
 // ─────────────────────────────────────────────────────────────
 
 struct ArrayDeclAST : AST {
     std::string name;
     int         size;
-    ASTType     type;   // int or float
-
+    ASTType     type;
     ArrayDeclAST(const std::string& n, int s, ASTType t = ASTType::Int)
         : name(n), size(s), type(t) {}
-
     void print(int indent) const override {
         std::cout << std::string(indent, ' ')
                   << "ArrayDecl: " << astTypeName(type)
@@ -265,15 +276,14 @@ struct ArrayAssignAST : AST {
 };
 
 // ─────────────────────────────────────────────────────────────
-//  Functions — now carry return type and parameter types
+//  Functions
 // ─────────────────────────────────────────────────────────────
 
 struct PrototypeAST : AST {
     std::string              name;
     std::vector<std::string> args;
-    std::vector<ASTType>     argTypes;   // parallel to args
+    std::vector<ASTType>     argTypes;
     ASTType                  returnType = ASTType::Int;
-
     void print(int indent) const override {
         std::cout << std::string(indent, ' ')
                   << "FunctionPrototype: "
@@ -310,9 +320,124 @@ struct CallAST : AST {
 };
 
 // ─────────────────────────────────────────────────────────────
-//  Program root
+//  OOP — Class declaration
 // ─────────────────────────────────────────────────────────────
 
+// A single field inside a class body
+struct ClassField {
+    std::string name;
+    ASTType     type;
+};
+
+// class Foo { int x; float y; int getX() { ... } }
+struct ClassDeclAST : AST {
+    std::string                               name;
+    std::vector<ClassField>                   fields;
+    std::vector<std::unique_ptr<FunctionAST>> methods;
+
+    void print(int indent) const override {
+        std::string sp(indent, ' ');
+        std::cout << sp << "ClassDecl: " << name << "\n";
+        for (auto& f : fields)
+            std::cout << sp << "  Field: " << astTypeName(f.type) << " " << f.name << "\n";
+        for (auto& m : methods)
+            m->print(indent + 2);
+    }
+};
+
+// ─────────────────────────────────────────────────────────────
+//  OOP — Object declaration  (ClassName varName;)
+// ─────────────────────────────────────────────────────────────
+struct ObjectDeclAST : AST {
+    std::string className;
+    std::string varName;
+    ObjectDeclAST(const std::string& cn, const std::string& vn)
+        : className(cn), varName(vn) {}
+    void print(int indent) const override {
+        std::cout << std::string(indent, ' ')
+                  << "ObjectDecl: " << className << " " << varName << "\n";
+    }
+};
+
+// ─────────────────────────────────────────────────────────────
+//  OOP — Member access  (obj.field  in expression)
+// ─────────────────────────────────────────────────────────────
+struct MemberAccessAST : AST {
+    std::string objName;
+    std::string memberName;
+    MemberAccessAST(const std::string& obj, const std::string& mem)
+        : objName(obj), memberName(mem) {}
+    void print(int indent) const override {
+        std::cout << std::string(indent, ' ')
+                  << "MemberAccess: " << objName << "." << memberName << "\n";
+    }
+};
+
+// ─────────────────────────────────────────────────────────────
+//  OOP — Member assign  (obj.field = expr;)
+// ─────────────────────────────────────────────────────────────
+struct MemberAssignAST : AST {
+    std::string          objName;
+    std::string          memberName;
+    std::unique_ptr<AST> expr;
+    MemberAssignAST(const std::string& obj, const std::string& mem,
+                    std::unique_ptr<AST> e)
+        : objName(obj), memberName(mem), expr(std::move(e)) {}
+    void print(int indent) const override {
+        std::cout << std::string(indent, ' ')
+                  << "MemberAssign: " << objName << "." << memberName << " =\n";
+        if (expr) expr->print(indent + 4);
+    }
+};
+
+// ─────────────────────────────────────────────────────────────
+//  OOP — Method call  (obj.method(args)  or  this.method(args))
+//         objName == "this" → call on implicit this pointer
+// ─────────────────────────────────────────────────────────────
+struct MethodCallAST : AST {
+    std::string                       objName;
+    std::string                       methodName;
+    std::vector<std::unique_ptr<AST>> args;
+    MethodCallAST(const std::string& obj, const std::string& meth,
+                  std::vector<std::unique_ptr<AST>> a)
+        : objName(obj), methodName(meth), args(std::move(a)) {}
+    void print(int indent) const override {
+        std::cout << std::string(indent, ' ')
+                  << "MethodCall: " << objName << "." << methodName << "()\n";
+        for (const auto& a : args) a->print(indent + 4);
+    }
+};
+
+// ─────────────────────────────────────────────────────────────
+//  OOP — this.field access (inside a method)
+// ─────────────────────────────────────────────────────────────
+struct ThisAccessAST : AST {
+    std::string memberName;
+    explicit ThisAccessAST(const std::string& m) : memberName(m) {}
+    void print(int indent) const override {
+        std::cout << std::string(indent, ' ')
+                  << "ThisAccess: this." << memberName << "\n";
+    }
+};
+
+// ─────────────────────────────────────────────────────────────
+//  OOP — this.field = expr (inside a method)
+// ─────────────────────────────────────────────────────────────
+struct ThisAssignAST : AST {
+    std::string          memberName;
+    std::unique_ptr<AST> expr;
+    ThisAssignAST(const std::string& m, std::unique_ptr<AST> e)
+        : memberName(m), expr(std::move(e)) {}
+    void print(int indent) const override {
+        std::cout << std::string(indent, ' ')
+                  << "ThisAssign: this." << memberName << " =\n";
+        if (expr) expr->print(indent + 4);
+    }
+};
+
+// ─────────────────────────────────────────────────────────────
+//  Program root
+// ─────────────────────────────────────────────────────────────
 struct ProgramAST : AST {
     std::vector<std::unique_ptr<AST>> topLevel;
     void print(int indent) const override {

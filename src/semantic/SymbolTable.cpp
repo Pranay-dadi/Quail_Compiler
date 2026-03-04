@@ -13,7 +13,6 @@ void SymbolTable::exitScope() {
     scopes.pop_back();
 }
 
-// ── Log helper ────────────────────────────────────────────────
 void SymbolTable::appendLog(const Symbol& sym) {
     SymbolLogEntry e;
     e.name          = sym.name;
@@ -22,17 +21,18 @@ void SymbolTable::appendLog(const Symbol& sym) {
     e.arraySize     = sym.arraySize;
     e.scopeDepth    = sym.definedAtDepth;
     e.ownerFunction = currentFunction;
+    e.objectClass   = sym.objectClass;
     e.paramTypes    = sym.paramTypes;
     e.returnType    = sym.returnType;
     log.push_back(e);
 }
 
-// ── insert ────────────────────────────────────────────────────
 void SymbolTable::insert(const std::string& name,
                          ValueType          type,
                          SymbolKind         kind,
                          llvm::Value*       value,
-                         int                arraySize)
+                         int                arraySize,
+                         const std::string& objectClass)
 {
     if (scopes.empty())
         throw std::runtime_error("[SymbolTable] No active scope");
@@ -49,12 +49,12 @@ void SymbolTable::insert(const std::string& name,
     sym.arraySize      = arraySize;
     sym.definedAtDepth = currentDepth();
     sym.ownerFunction  = currentFunction;
+    sym.objectClass    = objectClass;
     top[name] = sym;
 
     appendLog(sym);
 }
 
-// ── insertFunction ────────────────────────────────────────────
 void SymbolTable::insertFunction(const std::string&            name,
                                  ValueType                     returnType,
                                  const std::vector<ValueType>& paramTypes,
@@ -81,7 +81,6 @@ void SymbolTable::insertFunction(const std::string&            name,
     appendLog(sym);
 }
 
-// ── lookup ────────────────────────────────────────────────────
 Symbol* SymbolTable::lookup(const std::string& name) {
     for (auto it = scopes.rbegin(); it != scopes.rend(); ++it) {
         auto found = it->find(name);
@@ -135,6 +134,7 @@ std::string SymbolTable::kindName(SymbolKind k) {
         case SymbolKind::Array:     return "array";
         case SymbolKind::Function:  return "function";
         case SymbolKind::Parameter: return "parameter";
+        case SymbolKind::Object:    return "object";
     }
     return "?";
 }

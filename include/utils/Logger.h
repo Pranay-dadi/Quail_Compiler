@@ -1,9 +1,8 @@
 #pragma once
 #include <iostream>
+#include <string>
 
-enum class Stage {
-    LEXER, PARSER, SEMANTIC, CODEGEN, OPT
-};
+enum class Stage { LEXER, PARSER, SEMANTIC, CODEGEN, OPT };
 
 class Logger {
 public:
@@ -13,11 +12,11 @@ public:
 private:
     static std::string name(Stage s) {
         switch (s) {
-            case Stage::LEXER: return "LEXER";
-            case Stage::PARSER: return "PARSER";
+            case Stage::LEXER:    return "LEXER";
+            case Stage::PARSER:   return "PARSER";
             case Stage::SEMANTIC: return "SEMANTIC";
-            case Stage::CODEGEN: return "CODEGEN";
-            case Stage::OPT: return "OPT";
+            case Stage::CODEGEN:  return "CODEGEN";
+            case Stage::OPT:      return "OPT";
         }
         return "";
     }

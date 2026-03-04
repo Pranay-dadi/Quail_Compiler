@@ -7,6 +7,14 @@ enum class TokenType {
     IF, ELSE, WHILE, FOR,
     BREAK, CONTINUE,
 
+    // ── OOP keywords ──────────────────────────────────────────
+    CLASS,      // class
+    NEW,        // new  (reserved for future heap alloc)
+    THIS,       // this
+    PUBLIC,     // public  (parsed, treated as modifier, no enforcement)
+    PRIVATE,    // private (same)
+    VOID,       // void return type
+
     // ── Literals / identifiers ────────────────────────────────
     IDENT, NUMBER, FLOAT_VAL,
 
@@ -21,10 +29,11 @@ enum class TokenType {
     LBRACE, RBRACE,
     LBRACKET, RBRACKET,
     SEMI, COMMA,
+    DOT,        // '.'  member-access operator
 
-    // ── Comments (NEW — preserved through the pipeline) ───────
+    // ── Comments (preserved through pipeline) ─────────────────
     LINE_COMMENT,    // // text until newline
-    BLOCK_COMMENT,   // /* ... */  (may span multiple lines)
+    BLOCK_COMMENT,   // /* ... */
 
     // ── Sentinel ─────────────────────────────────────────────
     EOF_TOK
@@ -32,6 +41,6 @@ enum class TokenType {
 
 struct Token {
     TokenType   type;
-    std::string lexeme;   // raw text (for comments: the comment body, not delimiters)
-    int         line = 0; // 1-based source line
+    std::string lexeme;
+    int         line = 0;
 };

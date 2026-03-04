@@ -1,8 +1,26 @@
-# Quail Compiler
+# Quail Compiler  v3.0 — OOP Edition
 
-A hand-written compiler for a C-like language that targets LLVM IR.
+A hand-written compiler for a C-like language with **classes and objects**, targeting LLVM IR.
 
-## Language Features
+---
+
+## What's new in v3.0
+
+| Feature | Syntax |
+|---|---|
+| Class declaration | `class Point { int x; int y; }` |
+| Method declaration | `int getX() { return this.x; }` |
+| Object instantiation | `Point p;` |
+| Member field access | `p.x` |
+| Member field assignment | `p.x = 10;` |
+| Method call | `p.getX()` |
+| `this` pointer | `this.x = v;`  `this.method()` |
+| `void` return type | `void reset() { this.count = 0; }` |
+| Access modifiers | `public` / `private` (parsed; not enforced) |
+
+---
+
+## Full language feature table
 
 | Feature | Example |
 |---|---|
@@ -14,12 +32,63 @@ A hand-written compiler for a C-like language that targets LLVM IR.
 | Break / Continue | `break;`  `continue;` |
 | Logical ops | `a && b`  `a \|\| b`  `!a` |
 | Comparison | `==  !=  <  >  <=  >=` |
-| Arrays | `int arr[10];  arr[0] = 1;  arr[0]` |
+| Arrays | `int arr[10];  arr[0] = 1;` |
 | Functions | `int add(int a, int b) { return a+b; }` |
-| Recursion | `int fib(int n) { … return fib(n-1)+fib(n-2); }` |
+| Recursion | `int fib(int n) { return fib(n-1)+fib(n-2); }` |
 | Unary minus | `-x` |
 | Post-increment | `i++` |
 | Scoped blocks | `{ int tmp; … }` |
+| **Classes** | `class Foo { int x; }` |
+| **Objects** | `Foo obj;` |
+| **Member access** | `obj.x` |
+| **Member assign** | `obj.x = 5;` |
+| **Method call** | `obj.method(arg)` |
+| **this** | `this.x = v;`  `return this.x;` |
+| **void return** | `void reset() { … }` |
+| **public/private** | `public int get() { … }` |
+
+---
+
+## OOP language reference
+
+### Class declaration
+
+```
+class ClassName {
+    [public|private] int   fieldName;
+    [public|private] float fieldName2;
+
+    [public|private] ReturnType methodName(ParamType paramName, ...) {
+        // body — 'this' refers to the current object
+        this.fieldName = paramName;
+        return this.fieldName;
+    }
+}
+```
+
+- Fields are stored as a **stack-allocated LLVM struct** (`alloca %ClassName`).  
+- Methods are compiled to `ClassName_methodName(%ClassName* this_arg, ...)`.  
+- `this.field` is a GEP into the struct; `this.method()` is an indirect call.  
+- `public` / `private` are parsed and recorded but **not enforced** at compile time.
+
+### Object instantiation
+
+```
+ClassName varName;        // allocates struct on the stack
+varName.field = value;    // stores into GEP offset
+int x = varName.field;    // loads from GEP offset
+varName.method(arg);      // calls ClassName_method(varName_ptr, arg)
+```
+
+### Inside a method body
+
+```
+this.field          // read a field of the current object
+this.field = expr;  // write a field of the current object
+this.method(args);  // call another method on the same object
+```
+
+---
 
 ## Build
 
@@ -29,76 +98,176 @@ cmake ..
 make -j$(nproc)
 ```
 
+---
+
 ## Usage
 
 ### Compile a single file
+
 ```bash
 # Generate LLVM IR only
-./Quail_Compiler test/01_arithmetic.mc
+./Quail_Compiler test/21_class_basic.mc
 
-# Generate IR + produce and run executable
-./Quail_Compiler --build test/01_arithmetic.mc
+# Show token table, AST, class registry, symbol table
+./Quail_Compiler --debug test/21_class_basic.mc
 
-# Show coloured token table + AST
-./Quail_Compiler --debug test/01_arithmetic.mc
+# Compile + link + run native binary
+./Quail_Compiler --build test/21_class_basic.mc
+
+# Run with O0 (no optimization) to inspect raw IR
+./Quail_Compiler --O0 test/21_class_basic.mc
+
+# Show IR diff before/after optimization
+./Quail_Compiler --show-ir-diff test/21_class_basic.mc
 ```
 
-### Run all 20 tests at once
+### Run all tests
+
 ```bash
-# IR only (fastest)
+# IR only  (all 30 tests)
 ./Quail_Compiler --test-all
 
-# Build + run every test and show exit codes
+# Build + run all tests with exit codes
 ./Quail_Compiler --test-all --build
 
-# Build + run every test and show exit codes and disable autocorrect feature
-./Quail_Compiler --test-all --build --no-autocorrect 
-
-# Custom directories
-./Quail_Compiler --test-all --build --testdir ../test --out ../out
+# Disable autocorrect for strict error checking
+./Quail_Compiler --test-all --build --no-autocorrect
 ```
 
-Or use the helper script from the project root:
-```bash
-chmod +x run_tests.sh
-./run_tests.sh             # IR only
-./run_tests.sh --build     # build + run
+### Options reference
+
+| Flag | Description |
+|---|---|
+| `--debug` | Token table + full AST + class registry |
+| `--build` | Link native binary via llc + clang and run it |
+| `--O0` | No optimization |
+| `--O1` | Basic: mem2reg, instcombine, GVN |
+| `--O2` | Standard pipeline (default) |
+| `--O3` | Aggressive pipeline |
+| `--show-ir-diff` | Print IR before and after optimization |
+| `--no-autocorrect` | Disable automatic syntax error correction |
+| `--testdir <dir>` | Test directory (default: `test/`) |
+| `--out <dir>` | Output directory (default: `out/`) |
+
+---
+
+## Pipeline
+
 ```
+source.mc
+   │
+   ▼  Lexer (OOP tokens: class, this, public, private, void, .)
+   │
+   ▼  Parser → AST (ClassDeclAST, ObjectDeclAST,
+   │                MemberAccessAST, MemberAssignAST,
+   │                MethodCallAST, ThisAccessAST, ThisAssignAST)
+   │
+   ▼  CodeGen → LLVM StructType per class
+   │            methods → ClassName_method(%ClassName* this, ...)
+   │            objects → alloca %ClassName on stack
+   │            GEP for field read / write
+   │
+   ▼  Optimizer (O0–O3)
+   │
+   ▼  llc → .o    (--build)
+   │
+   ▼  clang → native binary
+```
+
+---
+
+## Test suite (30 tests)
+
+### Original tests (01–20)
+
+| # | File | Feature |
+|---|---|---|
+| 01 | `01_arithmetic.mc` | Arithmetic, operator precedence |
+| 02 | `02_if_else.mc` | If-else, max() |
+| 03 | `03_while_loop.mc` | While loop, post-increment |
+| 04 | `04_for_loop.mc` | For loop, factorial |
+| 05 | `05_nested_loops.mc` | Nested for loops |
+| 06 | `06_break_continue.mc` | break / continue |
+| 07 | `07_logical_ops.mc` | `&&` `\|\|` `!` |
+| 08 | `08_comparisons.mc` | `==` `!=` `>=` `<=` |
+| 09 | `09_arrays.mc` | Array declare/write/read |
+| 10 | `10_functions.mc` | Multiple functions |
+| 11 | `11_recursion_fib.mc` | Recursive Fibonacci |
+| 12 | `12_recursion_factorial.mc` | Recursive factorial |
+| 13 | `13_unary.mc` | Unary minus, abs() |
+| 14 | `14_nested_if.mc` | Deeply nested if-else |
+| 15 | `15_bubble_sort.mc` | Bubble sort |
+| 16 | `16_scoping.mc` | Block scoping |
+| 17 | `17_gcd.mc` | GCD (Euclidean) |
+| 18 | `18_power.mc` | Iterative power |
+| 19 | `19_post_increment.mc` | Post-increment return |
+| 20 | `20_complex.mc` | Combined features |
+
+### OOP tests (21–30)
+
+| # | File | OOP feature tested | Expected exit |
+|---|---|---|---|
+| 21 | `21_class_basic.mc` | Class, field, getter/setter methods | 42 |
+| 22 | `22_class_fields.mc` | Multiple fields, arithmetic method | 30 |
+| 23 | `23_two_objects.mc` | Two independent object instances | 7 |
+| 24 | `24_method_calls_method.mc` | `this.method()` inside a method | 100 |
+| 25 | `25_method_logic.mc` | if/else inside method, abs() | 15 |
+| 26 | `26_method_loop.mc` | Loop inside method, accumulator | 55 |
+| 27 | `27_access_modifiers.mc` | `public` / `private` modifiers | 77 |
+| 28 | `28_class_and_functions.mc` | Class + free function interop | 25 |
+| 29 | `29_two_classes.mc` | Two different classes in one program | 12 |
+| 30 | `30_oop_complex.mc` | Stack class + arrays + loops | 60 |
+
+---
 
 ## Output files
-
-All outputs land in `out/` (or the directory given with `--out`):
 
 | File | Description |
 |---|---|
 | `<stem>.ll` | LLVM IR — always produced |
 | `<stem>.o` | Object file — with `--build` |
-| `<stem>` | Executable — with `--build` |
+| `<stem>` | Native executable — with `--build` |
+| `<stem>_corrected.mc` | Auto-corrected source (when errors detected) |
 
-## Test suite (20 tests)
+---
 
-| # | File | Feature tested |
-|---|---|---|
-| 01 | `01_arithmetic.mc` | Basic arithmetic, operator precedence |
-| 02 | `02_if_else.mc` | If-else, function calls, max() |
-| 03 | `03_while_loop.mc` | While loop, post-increment |
-| 04 | `04_for_loop.mc` | For loop, factorial product |
-| 05 | `05_nested_loops.mc` | Nested for loops |
-| 06 | `06_break_continue.mc` | Break and continue |
-| 07 | `07_logical_ops.mc` | `&&` `\|\|` `!` operators |
-| 08 | `08_comparisons.mc` | `==` `!=` `>=` `<=` |
-| 09 | `09_arrays.mc` | Array declare, write, read, loop |
-| 10 | `10_functions.mc` | Multiple functions, nested calls |
-| 11 | `11_recursion_fib.mc` | Recursive Fibonacci |
-| 12 | `12_recursion_factorial.mc` | Recursive factorial |
-| 13 | `13_unary.mc` | Unary minus, abs() |
-| 14 | `14_nested_if.mc` | Deeply nested if-else (grade) |
-| 15 | `15_bubble_sort.mc` | Arrays + nested loops (bubble sort) |
-| 16 | `16_scoping.mc` | Block scoping, shadow variables |
-| 17 | `17_gcd.mc` | GCD via Euclidean algorithm |
-| 18 | `18_power.mc` | Iterative power function |
-| 19 | `19_post_increment.mc` | Post-increment return value |
-| 20 | `20_complex.mc` | Combined: arrays, functions, loops, logic |
+## LLVM IR for OOP constructs
+
+Given:
+```
+class Point { int x; int y; }
+Point p;
+p.x = 10;
+int v = p.x;
+p.getX();
+```
+
+The compiler emits approximately:
+```llvm
+%Point = type { i32, i32 }           ; struct for the class
+
+%p = alloca %Point                   ; object on stack
+
+; p.x = 10
+%p.x.ptr = getelementptr %Point, %Point* %p, i32 0, i32 0
+store i32 10, i32* %p.x.ptr
+
+; int v = p.x
+%v_load = load i32, i32* %p.x.ptr
+
+; p.getX() → compiled as Point_getX(%Point* %p)
+%call = call i32 @Point_getX(%Point* %p)
+```
+
+---
+
+## Known limitations
+
+- No heap allocation (`new`/`delete`) — all objects live on the stack.  
+- No inheritance or virtual dispatch.  
+- `public` / `private` are parsed but access control is not enforced.  
+- No constructor syntax; use an explicit `init()` method instead.  
+- Arrays inside class fields are not yet supported (use local arrays + object for index tracking, as shown in test 30).
 
 ## Expected exit codes (with --build)
 
@@ -126,19 +295,3 @@ All outputs land in `out/` (or the directory given with `--out`):
 | 20_complex | varies |
 
 > Note: Linux `exit()` codes are 8-bit (0–255). Values > 255 wrap around.
-
-## Pipeline
-
-```
-source.mc
-   │
-   ▼  Lexer       → token stream
-   │
-   ▼  Parser      → AST
-   │
-   ▼  CodeGen     → LLVM IR  (.ll)
-   │
-   ▼  llc         → object   (.o)
-   │
-   ▼  clang       → binary
-```

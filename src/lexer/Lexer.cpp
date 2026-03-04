@@ -34,11 +34,10 @@ std::vector<Token> Lexer::tokenize() {
 
         // ── Line comment  // ──────────────────────────────────
         if (c == '/' && peek() == '/') {
-            pos += 2;                           // consume //
+            pos += 2;
             std::string body;
             while (pos < src.size() && src[pos] != '\n')
                 body += src[pos++];
-            // ltrim the body for cleanliness
             size_t start = body.find_first_not_of(' ');
             if (start != std::string::npos) body = body.substr(start);
             if (keepComments)
@@ -48,23 +47,20 @@ std::vector<Token> Lexer::tokenize() {
 
         // ── Block comment  /* ... */ ──────────────────────────
         if (c == '/' && peek() == '*') {
-            pos += 2;                           // consume /*
+            pos += 2;
             int startLine = line;
             std::string body;
             bool closed = false;
             while (pos + 1 < src.size()) {
                 if (src[pos] == '\n') { line++; body += '\n'; pos++; continue; }
                 if (src[pos] == '*' && src[pos+1] == '/') {
-                    pos += 2;
-                    closed = true;
-                    break;
+                    pos += 2; closed = true; break;
                 }
                 body += src[pos++];
             }
             if (!closed)
                 addError("Unterminated block comment (opened at line "
                          + std::to_string(startLine) + ")");
-            // trim leading/trailing whitespace from body
             size_t s = body.find_first_not_of(" \t\n");
             size_t e = body.find_last_not_of(" \t\n");
             if (s != std::string::npos) body = body.substr(s, e - s + 1);
@@ -82,6 +78,7 @@ std::vector<Token> Lexer::tokenize() {
             TokenType tt;
             if      (id == "int")      tt = TokenType::INT;
             else if (id == "float")    tt = TokenType::FLOAT;
+            else if (id == "void")     tt = TokenType::VOID;
             else if (id == "return")   tt = TokenType::RETURN;
             else if (id == "if")       tt = TokenType::IF;
             else if (id == "else")     tt = TokenType::ELSE;
@@ -89,6 +86,11 @@ std::vector<Token> Lexer::tokenize() {
             else if (id == "for")      tt = TokenType::FOR;
             else if (id == "break")    tt = TokenType::BREAK;
             else if (id == "continue") tt = TokenType::CONTINUE;
+            else if (id == "class")    tt = TokenType::CLASS;
+            else if (id == "new")      tt = TokenType::NEW;
+            else if (id == "this")     tt = TokenType::THIS;
+            else if (id == "public")   tt = TokenType::PUBLIC;
+            else if (id == "private")  tt = TokenType::PRIVATE;
             else                       tt = TokenType::IDENT;
             tokens.push_back({tt, id, tokLine});
             continue;
@@ -120,6 +122,8 @@ std::vector<Token> Lexer::tokenize() {
                 tokens.push_back({TokenType::MUL, "*", tokLine}); pos++; continue;
             case '/':
                 tokens.push_back({TokenType::DIV, "/", tokLine}); pos++; continue;
+            case '.':
+                tokens.push_back({TokenType::DOT, ".", tokLine}); pos++; continue;
             case '=':
                 if (peek() == '=') { getChar(); getChar();
                     tokens.push_back({TokenType::EQ, "==", tokLine}); }
