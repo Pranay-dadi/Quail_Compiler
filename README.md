@@ -1,26 +1,8 @@
 # Quail Compiler  v3.0 — OOP Edition
 
-A hand-written compiler for a C-like language with **classes and objects**, targeting LLVM IR.
+A hand-written compiler for a C-like language that targets LLVM IR.
 
----
-
-## What's new in v3.0
-
-| Feature | Syntax |
-|---|---|
-| Class declaration | `class Point { int x; int y; }` |
-| Method declaration | `int getX() { return this.x; }` |
-| Object instantiation | `Point p;` |
-| Member field access | `p.x` |
-| Member field assignment | `p.x = 10;` |
-| Method call | `p.getX()` |
-| `this` pointer | `this.x = v;`  `this.method()` |
-| `void` return type | `void reset() { this.count = 0; }` |
-| Access modifiers | `public` / `private` (parsed; not enforced) |
-
----
-
-## Full language feature table
+## Language Features
 
 | Feature | Example |
 |---|---|
