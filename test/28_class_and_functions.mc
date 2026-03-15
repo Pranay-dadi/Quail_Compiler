@@ -32,3 +32,4 @@ int main() {
     int magnitude = sx + sy;      // 25  (3^2 + 4^2 = Pythagoras)
     return magnitude;
 }
+

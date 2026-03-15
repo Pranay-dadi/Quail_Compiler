@@ -23,3 +23,4 @@ int main() {
     int result = c.doubled();
     return result;
 }
+

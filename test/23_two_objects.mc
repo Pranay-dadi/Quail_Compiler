@@ -21,3 +21,4 @@ int main() {
     int result = a.get() + b.get();
     return result;
 }
+
