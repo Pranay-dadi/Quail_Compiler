@@ -81,6 +81,17 @@ struct VariableAST : AST {
 };
 
 // ─────────────────────────────────────────────────────────────
+//  String literal  (used in print / println)
+// ─────────────────────────────────────────────────────────────
+struct StringAST : AST {
+    std::string value;   // raw content (escape sequences already decoded by lexer)
+    explicit StringAST(std::string v) : value(std::move(v)) {}
+    void print(int indent) const override {
+        std::cout << std::string(indent, ' ') << "String: \"" << value << "\"\n";
+    }
+};
+
+// ─────────────────────────────────────────────────────────────
 //  Expressions
 // ─────────────────────────────────────────────────────────────
 
@@ -157,9 +168,6 @@ struct AssignAST : AST {
 };
 
 // Combined declare-and-initialize in the CURRENT scope (no child scope).
-// Replaces the old pattern of wrapping VarDecl+Assign in a BlockAST,
-// which erroneously destroyed the variable at the end of the inner block.
-// Example:  int result = obj.method();
 struct VarDeclInitAST : AST {
     std::string          name;
     ASTType              type;
@@ -229,6 +237,36 @@ struct BreakAST : AST {
 struct ContinueAST : AST {
     void print(int indent) const override {
         std::cout << std::string(indent, ' ') << "Continue\n";
+    }
+};
+
+// ─────────────────────────────────────────────────────────────
+//  I/O statements
+// ─────────────────────────────────────────────────────────────
+
+// print(expr, ...)   — prints each expression without trailing newline
+// println(expr, ...) — prints each expression then '\n'
+// println()          — prints just a newline
+struct PrintAST : AST {
+    std::vector<std::unique_ptr<AST>> exprs;
+    bool newline;   // true → println variant
+    PrintAST(std::vector<std::unique_ptr<AST>> e, bool nl)
+        : exprs(std::move(e)), newline(nl) {}
+    void print(int indent) const override {
+        std::cout << std::string(indent, ' ')
+                  << (newline ? "Println" : "Print") << ":\n";
+        for (const auto& e : exprs) e->print(indent + 4);
+    }
+};
+
+// scan(varName, ...)  — reads one value from stdin into each variable
+struct ScanAST : AST {
+    std::vector<std::string> varNames;
+    explicit ScanAST(std::vector<std::string> v) : varNames(std::move(v)) {}
+    void print(int indent) const override {
+        std::cout << std::string(indent, ' ') << "Scan:";
+        for (const auto& v : varNames) std::cout << " " << v;
+        std::cout << "\n";
     }
 };
 
@@ -323,13 +361,11 @@ struct CallAST : AST {
 //  OOP — Class declaration
 // ─────────────────────────────────────────────────────────────
 
-// A single field inside a class body
 struct ClassField {
     std::string name;
     ASTType     type;
 };
 
-// class Foo { int x; float y; int getX() { ... } }
 struct ClassDeclAST : AST {
     std::string                               name;
     std::vector<ClassField>                   fields;
@@ -345,9 +381,6 @@ struct ClassDeclAST : AST {
     }
 };
 
-// ─────────────────────────────────────────────────────────────
-//  OOP — Object declaration  (ClassName varName;)
-// ─────────────────────────────────────────────────────────────
 struct ObjectDeclAST : AST {
     std::string className;
     std::string varName;
@@ -359,9 +392,6 @@ struct ObjectDeclAST : AST {
     }
 };
 
-// ─────────────────────────────────────────────────────────────
-//  OOP — Member access  (obj.field  in expression)
-// ─────────────────────────────────────────────────────────────
 struct MemberAccessAST : AST {
     std::string objName;
     std::string memberName;
@@ -373,9 +403,6 @@ struct MemberAccessAST : AST {
     }
 };
 
-// ─────────────────────────────────────────────────────────────
-//  OOP — Member assign  (obj.field = expr;)
-// ─────────────────────────────────────────────────────────────
 struct MemberAssignAST : AST {
     std::string          objName;
     std::string          memberName;
@@ -390,10 +417,6 @@ struct MemberAssignAST : AST {
     }
 };
 
-// ─────────────────────────────────────────────────────────────
-//  OOP — Method call  (obj.method(args)  or  this.method(args))
-//         objName == "this" → call on implicit this pointer
-// ─────────────────────────────────────────────────────────────
 struct MethodCallAST : AST {
     std::string                       objName;
     std::string                       methodName;
@@ -408,9 +431,6 @@ struct MethodCallAST : AST {
     }
 };
 
-// ─────────────────────────────────────────────────────────────
-//  OOP — this.field access (inside a method)
-// ─────────────────────────────────────────────────────────────
 struct ThisAccessAST : AST {
     std::string memberName;
     explicit ThisAccessAST(const std::string& m) : memberName(m) {}
@@ -420,9 +440,6 @@ struct ThisAccessAST : AST {
     }
 };
 
-// ─────────────────────────────────────────────────────────────
-//  OOP — this.field = expr (inside a method)
-// ─────────────────────────────────────────────────────────────
 struct ThisAssignAST : AST {
     std::string          memberName;
     std::unique_ptr<AST> expr;

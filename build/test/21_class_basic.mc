@@ -19,3 +19,4 @@ int main() {
     int result = b.getValue();
     return result;
 }
+

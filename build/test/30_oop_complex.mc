@@ -55,3 +55,4 @@ int main() {
 
     return total;   // 30+20+10 = 60
 }
+

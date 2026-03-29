@@ -25,3 +25,4 @@ int main() {
     int result = p.area();
     return result;
 }
+

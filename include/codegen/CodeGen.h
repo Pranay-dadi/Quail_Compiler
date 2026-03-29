@@ -73,7 +73,6 @@ public:
     const OptStats&                    getOptStats() const { return optStats; }
     const std::vector<SymbolLogEntry>& getSymbolLog()const { return symbols.getLog(); }
 
-    // Class registry — for debug/report
     const std::unordered_map<std::string, ClassInfo>& getClassInfos() const { return classInfos; }
 
 private:
@@ -87,10 +86,15 @@ private:
     OptStats                       optStats;
 
     // ── OOP state ─────────────────────────────────────────────
-    std::unordered_map<std::string, llvm::StructType*> classTypes;   // class name → LLVM struct type
-    std::unordered_map<std::string, ClassInfo>         classInfos;   // class name → metadata
-    std::string   currentClassName;    // non-empty while generating a method
-    llvm::Value*  currentThisAlloca;   // alloca of ClassName* inside current method
+    std::unordered_map<std::string, llvm::StructType*> classTypes;
+    std::unordered_map<std::string, ClassInfo>         classInfos;
+    std::string   currentClassName;
+    llvm::Value*  currentThisAlloca;
+
+    // ── I/O runtime support ───────────────────────────────────
+    // Lazily declared on first use; nullptr until then.
+    llvm::Function* printfFunc = nullptr;   // i32 printf(i8*, ...)
+    llvm::Function* scanfFunc  = nullptr;   // i32 scanf(i8*, ...)
 
     // ── Helpers ───────────────────────────────────────────────
     void addError(const std::string& msg);
@@ -102,19 +106,28 @@ private:
     std::pair<llvm::Value*, llvm::Value*> promoteToCommon(llvm::Value* lhs, llvm::Value* rhs);
 
     // ── OOP helpers ───────────────────────────────────────────
-    // Generate a class method (prepends implicit this* parameter)
     void generateMethod(FunctionAST* f,
                         const std::string& className,
                         llvm::StructType*  structTy);
 
-    // Resolve a field GEP for an object symbol
     llvm::Value* fieldGEP(const Symbol* sym,
                           const std::string& fieldName,
                           const std::string& tag = "");
 
-    // Resolve a field GEP using an explicit struct pointer value
     llvm::Value* fieldGEPFromPtr(llvm::StructType* structTy,
                                   llvm::Value*      objPtr,
                                   int               fieldIdx,
                                   const std::string& tag = "");
+
+    // ── I/O helpers ───────────────────────────────────────────
+    // Returns (or creates) the printf / scanf declaration in the module.
+    llvm::Function* getOrDeclarePrintf();
+    llvm::Function* getOrDeclareScanf();
+
+    // Creates a private constant string global and returns a GEP i8* to it.
+    // Multiple calls with the same fmt string reuse the same global.
+    llvm::Value* buildFmtPtr(const std::string& fmt);
+
+    // Cache: format string content → its global variable
+    std::unordered_map<std::string, llvm::GlobalVariable*> fmtCache;
 };

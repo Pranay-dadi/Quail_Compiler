@@ -70,6 +70,40 @@ std::vector<Token> Lexer::tokenize() {
             continue;
         }
 
+        // ── String literals  "..." ────────────────────────────
+        if (c == '"') {
+            pos++; // skip opening quote
+            std::string str;
+            bool closed = false;
+            while (pos < src.size()) {
+                char ch = src[pos];
+                if (ch == '"') { pos++; closed = true; break; }
+                if (ch == '\n') { addError("Unterminated string literal"); break; }
+                if (ch == '\\' && pos + 1 < src.size()) {
+                    pos++;
+                    switch (src[pos]) {
+                        case 'n':  str += '\n'; break;
+                        case 't':  str += '\t'; break;
+                        case '"':  str += '"';  break;
+                        case '\\': str += '\\'; break;
+                        case '0':  str += '\0'; break;
+                        default:
+                            str += '\\';
+                            str += src[pos];
+                            break;
+                    }
+                    pos++;
+                } else {
+                    str += ch;
+                    pos++;
+                }
+            }
+            if (!closed && (pos >= src.size()))
+                addError("Unterminated string literal at end of file");
+            tokens.push_back({TokenType::STRING_LIT, str, tokLine});
+            continue;
+        }
+
         // ── Identifiers / keywords ────────────────────────────
         if (isalpha(c) || c == '_') {
             std::string id;
@@ -91,6 +125,10 @@ std::vector<Token> Lexer::tokenize() {
             else if (id == "this")     tt = TokenType::THIS;
             else if (id == "public")   tt = TokenType::PUBLIC;
             else if (id == "private")  tt = TokenType::PRIVATE;
+            // ── I/O keywords ──────────────────────────────────
+            else if (id == "print")    tt = TokenType::PRINT;
+            else if (id == "println")  tt = TokenType::PRINTLN;
+            else if (id == "scan")     tt = TokenType::SCAN;
             else                       tt = TokenType::IDENT;
             tokens.push_back({tt, id, tokLine});
             continue;

@@ -15,8 +15,14 @@ enum class TokenType {
     PRIVATE,    // private (same)
     VOID,       // void return type
 
+    // ── I/O keywords ──────────────────────────────────────────
+    PRINT,      // print(expr, ...)   — output without newline
+    PRINTLN,    // println(expr, ...) — output with trailing newline
+    SCAN,       // scan(var, ...)     — read from stdin into variables
+
     // ── Literals / identifiers ────────────────────────────────
     IDENT, NUMBER, FLOAT_VAL,
+    STRING_LIT,  // "text" — string literal (usable in print/println)
 
     // ── Operators ────────────────────────────────────────────
     PLUS, MINUS, MUL, DIV,

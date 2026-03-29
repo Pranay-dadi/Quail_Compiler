@@ -25,3 +25,4 @@ int main() {
     acct.setBonus(7);
     return acct.getTotal();   // 50+20+7 = 77
 }
+

@@ -1,13 +1,11 @@
 // ============================================================
-//  Quail Compiler  v3.0  — with OOP (classes & objects)
-//  Features:
-//    • class / object / this / public / private / void keywords
-//    • member field access and assignment  (obj.field)
-//    • method calls                         (obj.method(args))
-//    • this.field inside methods
-//    • Multi-level optimization  (--O0 / --O1 / --O2 / --O3)
-//    • Auto-correction of syntax errors     (--no-autocorrect to disable)
-//    • Comment preservation through full pipeline
+//  Quail Compiler  v3.1  — I/O edition
+//  New in v3.1:
+//    • print(expr, ...)     — output values, no trailing newline
+//    • println(expr, ...)   — output values with trailing newline
+//    • println()            — print a bare newline
+//    • scan(varName, ...)   — read values from stdin
+//    • "string literal"     — usable inside print / println
 //
 //  Usage:
 //    ./Quail_Compiler [--debug] [--build] [--O0|--O1|--O2|--O3]
@@ -65,9 +63,16 @@ static std::string tokStr(TokenType t) {
         case TokenType::THIS:          return "THIS";
         case TokenType::PUBLIC:        return "PUBLIC";
         case TokenType::PRIVATE:       return "PRIVATE";
+        // ── I/O keywords ──────────────────────────────────────
+        case TokenType::PRINT:         return "PRINT";
+        case TokenType::PRINTLN:       return "PRINTLN";
+        case TokenType::SCAN:          return "SCAN";
+        // ── Literals ──────────────────────────────────────────
         case TokenType::IDENT:         return "IDENT";
         case TokenType::NUMBER:        return "NUMBER";
         case TokenType::FLOAT_VAL:     return "FLOAT_VAL";
+        case TokenType::STRING_LIT:    return "STRING";
+        // ── Operators ─────────────────────────────────────────
         case TokenType::PLUS:          return "PLUS";
         case TokenType::MINUS:         return "MINUS";
         case TokenType::MUL:           return "MUL";
@@ -116,6 +121,10 @@ static void printTokenTable(const std::vector<Token>& tokens) {
             tk.type == TokenType::THIS   || tk.type == TokenType::PUBLIC ||
             tk.type == TokenType::PRIVATE)
             cat = std::string(MAGENTA) + "OOP_KW"   + RESET;
+        else if (tk.type == TokenType::PRINT   ||
+                 tk.type == TokenType::PRINTLN  ||
+                 tk.type == TokenType::SCAN)
+            cat = std::string(CYAN)    + "IO_KW"    + RESET;
         else if (tk.type == TokenType::VOID || tk.type == TokenType::INT  ||
                  tk.type == TokenType::FLOAT || tk.type == TokenType::RETURN ||
                  tk.type == TokenType::IF   || tk.type == TokenType::ELSE  ||
@@ -124,7 +133,9 @@ static void printTokenTable(const std::vector<Token>& tokens) {
             cat = std::string(GREEN)   + "KEYWORD"  + RESET;
         else if (tk.type == TokenType::IDENT)
             cat = std::string(CYAN)    + "IDENT"    + RESET;
-        else if (tk.type == TokenType::NUMBER || tk.type == TokenType::FLOAT_VAL)
+        else if (tk.type == TokenType::NUMBER    ||
+                 tk.type == TokenType::FLOAT_VAL ||
+                 tk.type == TokenType::STRING_LIT)
             cat = std::string(YELLOW)  + "LITERAL"  + RESET;
         else if (tk.type == TokenType::LINE_COMMENT || tk.type == TokenType::BLOCK_COMMENT)
             cat = std::string(DIM)     + "COMMENT"  + RESET;
@@ -205,7 +216,6 @@ static void printSymbolTable(const std::vector<SymbolLogEntry>& log) {
     for (const auto& e : log)
         (e.kind == SymbolKind::Function ? functions : locals).push_back(&e);
 
-    // Functions & methods
     std::cout << "\n" << BOLD << CYAN
               << "  ┌─────────────────────────────────────────────────────────┐\n"
               << "  │              FUNCTIONS & METHODS                        │\n"
@@ -229,7 +239,6 @@ static void printSymbolTable(const std::vector<SymbolLogEntry>& log) {
         }
     }
 
-    // Variables / Parameters / Objects
     std::cout << "\n" << BOLD << CYAN
               << "  ┌─────────────────────────────────────────────────────────┐\n"
               << "  │         VARIABLES, PARAMETERS & OBJECTS                 │\n"
@@ -384,7 +393,7 @@ struct CompileResult {
 };
 
 // ═════════════════════════════════════════════════════════════
-//  compileSinglePass — runs Lex → Parse → CodeGen → (Opt) → IR
+//  compileSinglePass
 // ═════════════════════════════════════════════════════════════
 static CompileResult compileSinglePass(const std::string& displayPath,
                                        const std::string& source,
@@ -454,7 +463,7 @@ static CompileResult compileSinglePass(const std::string& displayPath,
 
     if (verbose) {
         if (debugMode) {
-            std::cout << BLUE << BOLD << "[AST — with OOP nodes]\n" << RESET;
+            std::cout << BLUE << BOLD << "[AST — with OOP + I/O nodes]\n" << RESET;
             ast->print(0);
         } else {
             std::cout << GREEN << "Frontend OK\n" << RESET;
@@ -524,7 +533,7 @@ static CompileResult compileSinglePass(const std::string& displayPath,
 
     // ── BUILD (optional) ──────────────────────────────────────
     if (buildBinaries && res.irOk) {
-        std::string llcCmd   = "llc "   + res.llPath + " -filetype=obj -o " + objPath + " 2>/dev/null";
+        std::string llcCmd   = "llc -relocation-model=pic "   + res.llPath + " -filetype=obj -o " + objPath + " 2>/dev/null";
         std::string clangCmd = "clang " + objPath    + " -o " + res.binPath            + " 2>/dev/null";
         if (verbose) {
             std::cout << "\n" << BOLD << "Building...\n" << RESET
@@ -547,7 +556,7 @@ static CompileResult compileSinglePass(const std::string& displayPath,
     } else if (!buildBinaries && verbose) {
         std::cout << "\n" << BOLD << "Next steps:\n" << RESET
                   << "  llc "   << res.llPath << " -filetype=obj -o " << objPath << "\n"
-                  << "  clang " << objPath    << " -o " << res.binPath << "\n"
+                  << "  clang " << objPath    << " -o " << res.binPath << " -no-pie\n"
                   << "  " << res.binPath << " ; echo $?\n";
     }
 
@@ -578,7 +587,6 @@ static CompileResult compileOne(const std::string& srcPath,
     std::stringstream buf; buf << file.rdbuf();
     std::string source = buf.str();
 
-    // ── Pass 1: error detection (comment-stripped) ─────────────
     Lexer lx1(source, false);
     auto toks1     = lx1.tokenize();
     auto lexErrs1  = lx1.getErrors();
@@ -605,7 +613,6 @@ static CompileResult compileOne(const std::string& srcPath,
         return bad;
     }
 
-    // ── Auto-correction phase ──────────────────────────────────
     if (verbose) {
         std::cout << BOLD << "\n══ PASS 1: Errors detected ══\n" << RESET;
         reportErrors(srcPath, lexErrs1, parseErrs1, cgErrs1);
@@ -641,7 +648,6 @@ static CompileResult compileOne(const std::string& srcPath,
         }
     }
 
-    // Write corrected file
     std::string corrPath = outDir + "/" + stem + "_corrected.mc";
     { std::ofstream o(corrPath); if (o) o << corrected; }
 
@@ -701,7 +707,7 @@ static void runTestSuite(const std::string& testDir,
 
     std::cout << "\n" << BOLD
               << "╔══════════════════════════════════════════════════════════╗\n"
-              << "║       QUAIL COMPILER v3.0  —  BATCH TEST SUITE          ║\n"
+              << "║       QUAIL COMPILER v3.1  —  BATCH TEST SUITE          ║\n"
               << "╚══════════════════════════════════════════════════════════╝\n"
               << RESET
               << "  Test dir : " << testDir  << "\n"
@@ -789,7 +795,7 @@ int main(int argc, char* argv[]) {
     }
 
     if (inputFile.empty()) {
-        std::cout << BOLD << "Quail Compiler v3.0  (OOP edition)\n\n" << RESET
+        std::cout << BOLD << "Quail Compiler v3.1  (OOP + I/O edition)\n\n" << RESET
                   << "Usage:\n"
                   << "  Single file : ./Quail_Compiler [OPTIONS] <file.mc>\n"
                   << "  All tests   : ./Quail_Compiler --test-all [OPTIONS]\n\n"
@@ -804,6 +810,13 @@ int main(int argc, char* argv[]) {
                   << "  --no-autocorrect  Disable auto error correction\n"
                   << "  --testdir <dir>   Test directory (default: test/)\n"
                   << "  --out <dir>       Output directory (default: out/)\n\n"
+                  << "I/O language features (NEW in v3.1):\n"
+                  << "  println(\"Hello, World!\");       // print string + newline\n"
+                  << "  print(\"x = \", x);              // print string and int\n"
+                  << "  println(3.14);                 // print float\n"
+                  << "  println();                     // bare newline\n"
+                  << "  scan(x);                       // read int from stdin\n"
+                  << "  scan(a, b, c);                 // read multiple values\n\n"
                   << "OOP language features:\n"
                   << "  class Point { int x; int y; }\n"
                   << "  int getX() { return this.x; }\n"
@@ -817,13 +830,12 @@ int main(int argc, char* argv[]) {
                       optLevel == OptLevel::O1 ? "O1" :
                       optLevel == OptLevel::O2 ? "O2" : "O3";
 
-    // Truncate filename to fit the 27-char banner column without overflowing the box border
     std::string displayName = sp.filename().string();
     if (displayName.size() > 25) displayName = displayName.substr(0, 23) + "..";
 
     std::cout << "\n" << BOLD
               << "╔══════════════════════════════════════════════════════╗\n"
-              << "║  Quail Compiler v3.0  →  "
+              << "║  Quail Compiler v3.1  →  "
               << std::left << std::setw(27) << displayName << "║\n"
               << "║  Opt: " << lvl
               << "  │  Comments: ON  │  OOP: ON  │  AutoFix: "

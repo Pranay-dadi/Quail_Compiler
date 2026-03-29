@@ -41,3 +41,4 @@ int main() {
     int result = rect.area() - c.getRadius();   // 15 - 3 = 12
     return result;
 }
+
