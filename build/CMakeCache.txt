@@ -215,6 +215,9 @@ FFI_INCLUDE_DIRS:PATH=/usr/include/x86_64-linux-gnu
 //Path to a library.
 FFI_LIBRARIES:FILEPATH=/usr/lib/x86_64-linux-gnu/libffi.so
 
+//Path to a program.
+GRAPHVIZ_DOT:FILEPATH=/usr/bin/dot
+
 //Path to a file.
 LIBXML2_INCLUDE_DIR:PATH=/usr/include/libxml2
 

@@ -13,6 +13,9 @@ sudo apt-get install llvm-dev llvm-tools clang clang-dev
 sudo apt-get install llvm-14-dev llvm-14-tools clang-14 clang-14-dev
 sudo apt-get install zlib1g-dev python3
 
+# For GraphViz and rendering of graphs
+sudo apt install graphviz
+
 
 
 ## Language Features
@@ -114,6 +117,30 @@ make -j$(nproc)
 
 # Show IR diff before/after optimization
 ./Quail_Compiler --show-ir-diff test/21_class_basic.mc
+
+# AST Grapher
+./Quail_Compiler --ast-graph test/21_class_basic.mc
+./Quail_Compiler --ast-stats test/21_class_basic.mc
+./Quail_Compiler --ast-graph --ast-stats test/21_class_basic.mc
+
+# CFG Analyzer
+./Quail_Compiler --cfg test/21_class_basic.mc
+./Quail_Compiler --cfg-all test/21_class_basic.mc
+./Quail_Compiler --call-graph test/21_class_basic.mc
+./Quail_Compiler --complexity test/21_class_basic.mc
+./Quail_Compiler --dead-code test/21_class_basic.mc
+
+# Graph Rendering
+./Quail_Compiler --cfg --render test/21_class_basic.mc
+./Quail_Compiler --ast-graph --render test/21_class_basic.mc
+./Quail_Compiler --call-graph --render test/21_class_basic.mc
+./Quail_Compiler --cfg-all --render test/21_class_basic.mc
+
+# Full Analysis
+./Quail_Compiler --graph test/21_class_basic.mc
+
+# Full Analysis and PNG output
+./Quail_Compiler --graph --render test/21_class_basic.mc
 ```
 
 ### Run all tests
@@ -127,6 +154,12 @@ make -j$(nproc)
 
 # Disable autocorrect for strict error checking
 ./Quail_Compiler --test-all --build --no-autocorrect
+
+# Graph for all tests
+./Quail_Compiler --test-all --graph
+
+# Graph Rendering for all tests
+./Quail_Compiler --test-all --graph --render
 ```
 
 ### Options reference

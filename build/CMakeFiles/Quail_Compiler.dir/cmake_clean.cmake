@@ -1,4 +1,8 @@
 file(REMOVE_RECURSE
+  "CMakeFiles/Quail_Compiler.dir/src/analysis/ASTGrapher.cpp.o"
+  "CMakeFiles/Quail_Compiler.dir/src/analysis/ASTGrapher.cpp.o.d"
+  "CMakeFiles/Quail_Compiler.dir/src/analysis/CFGAnalyzer.cpp.o"
+  "CMakeFiles/Quail_Compiler.dir/src/analysis/CFGAnalyzer.cpp.o.d"
   "CMakeFiles/Quail_Compiler.dir/src/autocorrect/AutoCorrector.cpp.o"
   "CMakeFiles/Quail_Compiler.dir/src/autocorrect/AutoCorrector.cpp.o.d"
   "CMakeFiles/Quail_Compiler.dir/src/codegen/CodeGen.cpp.o"

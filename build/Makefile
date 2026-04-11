@@ -168,6 +168,54 @@ Quail_Compiler/fast:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Quail_Compiler.dir/build.make CMakeFiles/Quail_Compiler.dir/build
 .PHONY : Quail_Compiler/fast
 
+src/analysis/ASTGrapher.o: src/analysis/ASTGrapher.cpp.o
+.PHONY : src/analysis/ASTGrapher.o
+
+# target to build an object file
+src/analysis/ASTGrapher.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Quail_Compiler.dir/build.make CMakeFiles/Quail_Compiler.dir/src/analysis/ASTGrapher.cpp.o
+.PHONY : src/analysis/ASTGrapher.cpp.o
+
+src/analysis/ASTGrapher.i: src/analysis/ASTGrapher.cpp.i
+.PHONY : src/analysis/ASTGrapher.i
+
+# target to preprocess a source file
+src/analysis/ASTGrapher.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Quail_Compiler.dir/build.make CMakeFiles/Quail_Compiler.dir/src/analysis/ASTGrapher.cpp.i
+.PHONY : src/analysis/ASTGrapher.cpp.i
+
+src/analysis/ASTGrapher.s: src/analysis/ASTGrapher.cpp.s
+.PHONY : src/analysis/ASTGrapher.s
+
+# target to generate assembly for a file
+src/analysis/ASTGrapher.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Quail_Compiler.dir/build.make CMakeFiles/Quail_Compiler.dir/src/analysis/ASTGrapher.cpp.s
+.PHONY : src/analysis/ASTGrapher.cpp.s
+
+src/analysis/CFGAnalyzer.o: src/analysis/CFGAnalyzer.cpp.o
+.PHONY : src/analysis/CFGAnalyzer.o
+
+# target to build an object file
+src/analysis/CFGAnalyzer.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Quail_Compiler.dir/build.make CMakeFiles/Quail_Compiler.dir/src/analysis/CFGAnalyzer.cpp.o
+.PHONY : src/analysis/CFGAnalyzer.cpp.o
+
+src/analysis/CFGAnalyzer.i: src/analysis/CFGAnalyzer.cpp.i
+.PHONY : src/analysis/CFGAnalyzer.i
+
+# target to preprocess a source file
+src/analysis/CFGAnalyzer.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Quail_Compiler.dir/build.make CMakeFiles/Quail_Compiler.dir/src/analysis/CFGAnalyzer.cpp.i
+.PHONY : src/analysis/CFGAnalyzer.cpp.i
+
+src/analysis/CFGAnalyzer.s: src/analysis/CFGAnalyzer.cpp.s
+.PHONY : src/analysis/CFGAnalyzer.s
+
+# target to generate assembly for a file
+src/analysis/CFGAnalyzer.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Quail_Compiler.dir/build.make CMakeFiles/Quail_Compiler.dir/src/analysis/CFGAnalyzer.cpp.s
+.PHONY : src/analysis/CFGAnalyzer.cpp.s
+
 src/autocorrect/AutoCorrector.o: src/autocorrect/AutoCorrector.cpp.o
 .PHONY : src/autocorrect/AutoCorrector.o
 
@@ -348,6 +396,12 @@ help:
 	@echo "... intrinsics_gen"
 	@echo "... omp_gen"
 	@echo "... Quail_Compiler"
+	@echo "... src/analysis/ASTGrapher.o"
+	@echo "... src/analysis/ASTGrapher.i"
+	@echo "... src/analysis/ASTGrapher.s"
+	@echo "... src/analysis/CFGAnalyzer.o"
+	@echo "... src/analysis/CFGAnalyzer.i"
+	@echo "... src/analysis/CFGAnalyzer.s"
 	@echo "... src/autocorrect/AutoCorrector.o"
 	@echo "... src/autocorrect/AutoCorrector.i"
 	@echo "... src/autocorrect/AutoCorrector.s"

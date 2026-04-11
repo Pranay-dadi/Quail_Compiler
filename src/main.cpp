@@ -1,16 +1,21 @@
 // ============================================================
-//  Quail Compiler  v3.1  — I/O edition
-//  New in v3.1:
-//    • print(expr, ...)     — output values, no trailing newline
-//    • println(expr, ...)   — output values with trailing newline
-//    • println()            — print a bare newline
-//    • scan(varName, ...)   — read values from stdin
-//    • "string literal"     — usable inside print / println
+//  Quail Compiler  v4.0  — Analysis Edition
+//
+//  New in v4.0:
+//    • --cfg           Per-function CFG DOT files
+//    • --cfg-all       All functions in one clustered DOT
+//    • --call-graph    Call graph DOT file
+//    • --ast-graph     AST visualisation DOT file
+//    • --ast-stats     AST node statistics breakdown
+//    • --complexity    Cyclomatic-complexity report
+//    • --dead-code     Unreachable basic-block detection
+//    • --graph         Enable all graph outputs at once
+//    • --render        Auto-render DOTs to PNG via graphviz
+//    • --summary       Compact compilation summary table
 //
 //  Usage:
-//    ./Quail_Compiler [--debug] [--build] [--O0|--O1|--O2|--O3]
-//                    [--no-autocorrect] [--show-ir-diff] <file.mc>
-//    ./Quail_Compiler --test-all [--build] [--O2] [--testdir d] [--out d]
+//    ./Quail_Compiler [FLAGS]  <file.mc>
+//    ./Quail_Compiler --test-all [FLAGS]
 // ============================================================
 
 #include <iostream>
@@ -29,10 +34,12 @@
 #include "parser/Parser.h"
 #include "codegen/CodeGen.h"
 #include "autocorrect/AutoCorrector.h"
+#include "analysis/CFGAnalyzer.h"
+#include "analysis/ASTGrapher.h"
 
 namespace fs = std::filesystem;
 
-// ── ANSI colours ──────────────────────────────────────────────
+// ── ANSI colour codes ─────────────────────────────────────────
 static const char* RED     = "\033[1;31m";
 static const char* GREEN   = "\033[1;32m";
 static const char* YELLOW  = "\033[1;33m";
@@ -43,8 +50,66 @@ static const char* BOLD    = "\033[1m";
 static const char* DIM     = "\033[2m";
 static const char* RESET   = "\033[0m";
 
+// ── Forward declarations ──────────────────────────────────────
+static std::string tokStr(TokenType t);
+static void printTokenTable(const std::vector<Token>& tokens);
+static void printCommentSummary(const std::vector<Token>& tokens);
+static void printClassRegistry(const std::unordered_map<std::string,ClassInfo>&);
+static void printSymbolTable(const std::vector<SymbolLogEntry>&);
+static void printOptReport(const OptStats&, OptLevel, const std::string&, const std::string&, bool);
+static bool reportErrors(const std::string&, const std::vector<LexError>&,
+                         const std::vector<ParseError>&, const std::vector<CodeGenError>&);
+
+// ── BUG FIX: forward-declare these so compileSinglePass can see them ──
+struct CompileOptions;
+struct CompileResult;
+static void printGeneratedFiles(const CompileResult& r, const std::string& stem);
+static void runGraphAnalysis(CodeGen& cg, AST* ast, const std::string& outDir,
+                             const std::string& stem, const CompileOptions& opts,
+                             CompileResult& res, bool verbose);
+
 // ─────────────────────────────────────────────────────────────
-//  Token type → display string
+//  Compilation options (bundled for clean passing)
+// ─────────────────────────────────────────────────────────────
+struct CompileOptions {
+    bool debugMode      = false;
+    bool buildBin       = false;
+    bool autoCorrect    = true;
+    bool showIrDiff     = false;
+    bool genCFG         = false;   // per-function CFG DOT
+    bool genCFGAll      = false;   // all-in-one CFG DOT
+    bool genCallGraph   = false;   // call graph DOT
+    bool genASTGraph    = false;   // AST DOT
+    bool showASTStats   = false;
+    bool showComplexity = false;
+    bool showDeadCode   = false;
+    bool renderGraphs   = false;   // call graphviz `dot`
+    bool showSummary    = true;
+    OptLevel optLevel   = OptLevel::O2;
+};
+
+// ─────────────────────────────────────────────────────────────
+//  CompileResult
+// ─────────────────────────────────────────────────────────────
+struct CompileResult {
+    bool        parseOk      = false;
+    bool        irOk         = false;
+    bool        linkOk       = false;
+    int         exitCode     = -1;
+    int         errorCount   = 0;
+    std::string llPath;
+    std::string binPath;
+    int         commentCount = 0;
+    int         classCount   = 0;
+    int         lineCount    = 0;
+    int         tokenCount   = 0;
+    // Generated graph files
+    std::vector<std::string> dotFiles;
+    std::vector<std::string> pngFiles;
+};
+
+// ─────────────────────────────────────────────────────────────
+//  Token → display string
 // ─────────────────────────────────────────────────────────────
 static std::string tokStr(TokenType t) {
     switch (t) {
@@ -63,16 +128,13 @@ static std::string tokStr(TokenType t) {
         case TokenType::THIS:          return "THIS";
         case TokenType::PUBLIC:        return "PUBLIC";
         case TokenType::PRIVATE:       return "PRIVATE";
-        // ── I/O keywords ──────────────────────────────────────
         case TokenType::PRINT:         return "PRINT";
         case TokenType::PRINTLN:       return "PRINTLN";
         case TokenType::SCAN:          return "SCAN";
-        // ── Literals ──────────────────────────────────────────
         case TokenType::IDENT:         return "IDENT";
         case TokenType::NUMBER:        return "NUMBER";
         case TokenType::FLOAT_VAL:     return "FLOAT_VAL";
         case TokenType::STRING_LIT:    return "STRING";
-        // ── Operators ─────────────────────────────────────────
         case TokenType::PLUS:          return "PLUS";
         case TokenType::MINUS:         return "MINUS";
         case TokenType::MUL:           return "MUL";
@@ -120,29 +182,29 @@ static void printTokenTable(const std::vector<Token>& tokens) {
         if (tk.type == TokenType::CLASS  || tk.type == TokenType::NEW   ||
             tk.type == TokenType::THIS   || tk.type == TokenType::PUBLIC ||
             tk.type == TokenType::PRIVATE)
-            cat = std::string(MAGENTA) + "OOP_KW"   + RESET;
+            cat = std::string(MAGENTA) + "OOP_KW"  + RESET;
         else if (tk.type == TokenType::PRINT   ||
                  tk.type == TokenType::PRINTLN  ||
                  tk.type == TokenType::SCAN)
-            cat = std::string(CYAN)    + "IO_KW"    + RESET;
+            cat = std::string(CYAN)    + "IO_KW"   + RESET;
         else if (tk.type == TokenType::VOID || tk.type == TokenType::INT  ||
                  tk.type == TokenType::FLOAT || tk.type == TokenType::RETURN ||
                  tk.type == TokenType::IF   || tk.type == TokenType::ELSE  ||
                  tk.type == TokenType::WHILE|| tk.type == TokenType::FOR   ||
                  tk.type == TokenType::BREAK|| tk.type == TokenType::CONTINUE)
-            cat = std::string(GREEN)   + "KEYWORD"  + RESET;
+            cat = std::string(GREEN)   + "KEYWORD" + RESET;
         else if (tk.type == TokenType::IDENT)
-            cat = std::string(CYAN)    + "IDENT"    + RESET;
+            cat = std::string(CYAN)    + "IDENT"   + RESET;
         else if (tk.type == TokenType::NUMBER    ||
                  tk.type == TokenType::FLOAT_VAL ||
                  tk.type == TokenType::STRING_LIT)
-            cat = std::string(YELLOW)  + "LITERAL"  + RESET;
+            cat = std::string(YELLOW)  + "LITERAL" + RESET;
         else if (tk.type == TokenType::LINE_COMMENT || tk.type == TokenType::BLOCK_COMMENT)
-            cat = std::string(DIM)     + "COMMENT"  + RESET;
+            cat = std::string(DIM)     + "COMMENT" + RESET;
         else if (tk.type == TokenType::DOT)
-            cat = std::string(CYAN)    + "MEMBER"   + RESET;
+            cat = std::string(CYAN)    + "MEMBER"  + RESET;
         else
-            cat = std::string(RED)     + "OP/PUNCT" + RESET;
+            cat = std::string(RED)     + "OP/PUNCT"+ RESET;
 
         std::string lex = tk.lexeme;
         if (lex.size() > (size_t)(W1 - 2)) lex = lex.substr(0, W1 - 5) + "...";
@@ -155,9 +217,6 @@ static void printTokenTable(const std::vector<Token>& tokens) {
     std::cout << sep << "\n";
 }
 
-// ─────────────────────────────────────────────────────────────
-//  Comment summary
-// ─────────────────────────────────────────────────────────────
 static void printCommentSummary(const std::vector<Token>& tokens) {
     int lineCount = 0, blockCount = 0;
     std::cout << "\n" << DIM << BOLD << "── Comments found in source ──\n" << RESET;
@@ -180,9 +239,6 @@ static void printCommentSummary(const std::vector<Token>& tokens) {
                   << blockCount << " block comment(s)\n" << RESET;
 }
 
-// ─────────────────────────────────────────────────────────────
-//  Class registry report
-// ─────────────────────────────────────────────────────────────
 static void printClassRegistry(
         const std::unordered_map<std::string, ClassInfo>& infos)
 {
@@ -204,9 +260,6 @@ static void printClassRegistry(
     std::cout << "\n";
 }
 
-// ─────────────────────────────────────────────────────────────
-//  Symbol table
-// ─────────────────────────────────────────────────────────────
 static void printSymbolTable(const std::vector<SymbolLogEntry>& log) {
     if (log.empty()) {
         std::cout << DIM << "  (symbol table empty)\n" << RESET;
@@ -279,9 +332,6 @@ static void printSymbolTable(const std::vector<SymbolLogEntry>& log) {
     std::cout << "\n";
 }
 
-// ─────────────────────────────────────────────────────────────
-//  Optimization report
-// ─────────────────────────────────────────────────────────────
 static void printOptReport(const OptStats& s, OptLevel level,
                            const std::string& irBefore,
                            const std::string& irAfter,
@@ -353,9 +403,6 @@ static void printOptReport(const OptStats& s, OptLevel level,
     }
 }
 
-// ─────────────────────────────────────────────────────────────
-//  Error report
-// ─────────────────────────────────────────────────────────────
 static bool reportErrors(const std::string& filename,
                          const std::vector<LexError>&     lexErrs,
                          const std::vector<ParseError>&   parseErrs,
@@ -378,19 +425,177 @@ static bool reportErrors(const std::string& filename,
 }
 
 // ─────────────────────────────────────────────────────────────
-//  CompileResult
+//  printGeneratedFiles()  — summary of all output artifacts
 // ─────────────────────────────────────────────────────────────
-struct CompileResult {
-    bool        parseOk      = false;
-    bool        irOk         = false;
-    bool        linkOk       = false;
-    int         exitCode     = -1;
-    int         errorCount   = 0;
-    std::string llPath;
-    std::string binPath;
-    int         commentCount = 0;
-    int         classCount   = 0;
-};
+static void printGeneratedFiles(const CompileResult& r, const std::string& /*stem*/) {
+    std::cout << "\n" << BOLD << CYAN
+              << "── Generated Files ──────────────────────────────────────\n" << RESET;
+    auto printFile = [&](const std::string& path, const std::string& kind) {
+        if (!path.empty() && fs::exists(path)) {
+            auto sz = fs::file_size(path);
+            std::cout << "  " << CYAN << std::left << std::setw(10) << kind << RESET
+                      << "  " << path
+                      << DIM << "  (" << sz << " B)" << RESET << "\n";
+        }
+    };
+    printFile(r.llPath,  "IR (.ll)");
+    printFile(r.binPath, "binary");
+    for (auto& d : r.dotFiles)
+        printFile(d, "DOT");
+    for (auto& p : r.pngFiles)
+        printFile(p, "PNG");
+    std::cout << "\n";
+}
+
+// ─────────────────────────────────────────────────────────────
+//  runGraphAnalysis  — CFG, call graph, AST graphing
+//
+//  BUG FIXES applied here:
+//   1. showASTStats is now handled independently of genASTGraph
+//      (was previously nested inside the genASTGraph block, causing
+//       stats to be silently skipped when genASTGraph=false)
+//   2. AST stats are no longer printed twice when both
+//      --ast-stats and --ast-graph are active
+// ─────────────────────────────────────────────────────────────
+static void runGraphAnalysis(CodeGen&           cg,
+                              AST*               ast,
+                              const std::string& outDir,
+                              const std::string& stem,
+                              const CompileOptions& opts,
+                              CompileResult&     res,
+                              bool               verbose)
+{
+    llvm::Module* mod = cg.getModule();
+    if (!mod) {
+        if (verbose)
+            std::cerr << RED << "  [Graph] LLVM module unavailable — skipping analysis.\n" << RESET;
+        return;
+    }
+
+    CFGAnalyzer cfgAnalyzer(mod);
+    cfgAnalyzer.analyze();
+
+    // ── Complexity report ─────────────────────────────────────
+    if (opts.showComplexity)
+        cfgAnalyzer.printComplexityReport();
+
+    // ── Dead code report ──────────────────────────────────────
+    if (opts.showDeadCode) {
+        std::cout << "\n" << BOLD << CYAN
+                  << "── Dead-Code Analysis ────────────────────────────────────\n" << RESET;
+        cfgAnalyzer.printDeadCodeReport();
+    }
+
+    // ── CFG summary (always when verbose + any CFG graph flag) ─
+    if (verbose && (opts.genCFG || opts.genCFGAll))
+        cfgAnalyzer.printCFGSummary();
+
+    // ── Per-function CFG DOT ──────────────────────────────────
+    if (opts.genCFG) {
+        for (auto& fn : cfgAnalyzer.getFunctions()) {
+            std::string dotPath = outDir + "/" + stem + "_cfg_" + fn.name + ".dot";
+            std::string content = cfgAnalyzer.generateFunctionDOT(fn, /*showInstr=*/true);
+            if (cfgAnalyzer.saveDOT(dotPath, content)) {
+                res.dotFiles.push_back(dotPath);
+                if (verbose)
+                    std::cout << YELLOW << "  CFG DOT : " << dotPath << RESET << "\n";
+                if (opts.renderGraphs) {
+                    std::string pngPath = outDir + "/" + stem + "_cfg_" + fn.name + ".png";
+                    if (CFGAnalyzer::render(dotPath, pngPath)) {
+                        res.pngFiles.push_back(pngPath);
+                        if (verbose) std::cout << GREEN << "  CFG PNG : " << pngPath << RESET << "\n";
+                    } else if (verbose) {
+                        std::cout << DIM << "  (graphviz not found — install with: sudo apt install graphviz)\n" << RESET;
+                    }
+                }
+            } else if (verbose) {
+                std::cerr << RED << "  Failed to write DOT: " << dotPath << RESET << "\n";
+            }
+        }
+    }
+
+    // ── All-functions CFG DOT ─────────────────────────────────
+    if (opts.genCFGAll) {
+        std::string dotPath = outDir + "/" + stem + "_cfg_all.dot";
+        if (cfgAnalyzer.saveDOT(dotPath, cfgAnalyzer.generateAllFunctionsDOT())) {
+            res.dotFiles.push_back(dotPath);
+            if (verbose) std::cout << YELLOW << "  CFG-all DOT: " << dotPath << RESET << "\n";
+            if (opts.renderGraphs) {
+                std::string pngPath = outDir + "/" + stem + "_cfg_all.png";
+                if (CFGAnalyzer::render(dotPath, pngPath)) {
+                    res.pngFiles.push_back(pngPath);
+                    if (verbose) std::cout << GREEN << "  CFG-all PNG: " << pngPath << RESET << "\n";
+                }
+            }
+        } else if (verbose) {
+            std::cerr << RED << "  Failed to write DOT: " << dotPath << RESET << "\n";
+        }
+    }
+
+    // ── Call graph DOT ────────────────────────────────────────
+    if (opts.genCallGraph) {
+        std::string dotPath = outDir + "/" + stem + "_callgraph.dot";
+        if (cfgAnalyzer.saveDOT(dotPath, cfgAnalyzer.generateCallGraphDOT())) {
+            res.dotFiles.push_back(dotPath);
+            if (verbose) std::cout << YELLOW << "  Call-graph DOT: " << dotPath << RESET << "\n";
+            if (opts.renderGraphs) {
+                std::string pngPath = outDir + "/" + stem + "_callgraph.png";
+                if (CFGAnalyzer::render(dotPath, pngPath)) {
+                    res.pngFiles.push_back(pngPath);
+                    if (verbose) std::cout << GREEN << "  Call-graph PNG: " << pngPath << RESET << "\n";
+                }
+            }
+        } else if (verbose) {
+            std::cerr << RED << "  Failed to write DOT: " << dotPath << RESET << "\n";
+        }
+    }
+
+    // ── BUG FIX: AST stats are now independent of genASTGraph ─
+    //  Previously: stats were nested inside `if (opts.genASTGraph)`,
+    //  so `--ast-stats` alone never printed anything from this function.
+    //  Now: stats run whenever showASTStats is set, regardless of
+    //  whether the DOT file is also being generated.
+    if (opts.showASTStats && ast) {
+        ASTGrapher grapher;
+        auto stats = grapher.computeStats(ast);
+        grapher.printStats(stats);
+    }
+
+    // ── AST DOT ───────────────────────────────────────────────
+    if (opts.genASTGraph && ast) {
+        ASTGrapher grapher;
+        std::string dotPath = outDir + "/" + stem + "_ast.dot";
+        if (grapher.saveDOT(ast, dotPath, "Quail AST — " + stem)) {
+            res.dotFiles.push_back(dotPath);
+            if (verbose) std::cout << YELLOW << "  AST DOT: " << dotPath << RESET << "\n";
+            if (opts.renderGraphs) {
+                std::string pngPath = outDir + "/" + stem + "_ast.png";
+                if (ASTGrapher::render(dotPath, pngPath)) {
+                    res.pngFiles.push_back(pngPath);
+                    if (verbose) std::cout << GREEN << "  AST PNG: " << pngPath << RESET << "\n";
+                } else if (verbose) {
+                    std::cout << DIM << "  (graphviz not found — install with: sudo apt install graphviz)\n" << RESET;
+                }
+            }
+        } else if (verbose) {
+            std::cerr << RED << "  Failed to write AST DOT: " << dotPath << RESET << "\n";
+        }
+    }
+
+    // ── Summary of what was produced ─────────────────────────
+    if (verbose) {
+        int nDot = (int)res.dotFiles.size();
+        int nPng = (int)res.pngFiles.size();
+        if (nDot > 0 || nPng > 0) {
+            std::cout << "\n" << DIM << "  Analysis produced: "
+                      << nDot << " DOT file(s)";
+            if (nPng > 0) std::cout << ", " << nPng << " PNG file(s)";
+            if (nDot > 0 && nPng == 0 && opts.renderGraphs == false)
+                std::cout << "  (add --render to auto-generate PNGs)";
+            std::cout << RESET << "\n";
+        }
+    }
+}
 
 // ═════════════════════════════════════════════════════════════
 //  compileSinglePass
@@ -399,27 +604,28 @@ static CompileResult compileSinglePass(const std::string& displayPath,
                                        const std::string& source,
                                        const std::string& outDir,
                                        const std::string& stem,
-                                       bool  debugMode,
-                                       bool  buildBinaries,
                                        bool  verbose,
-                                       OptLevel optLevel,
-                                       bool showIrDiff)
+                                       const CompileOptions& opts)
 {
     CompileResult res;
     res.llPath  = outDir + "/" + stem + ".ll";
     res.binPath = outDir + "/" + stem;
     std::string objPath = outDir + "/" + stem + ".o";
 
+    // Source line count
+    res.lineCount = (int)std::count(source.begin(), source.end(), '\n') + 1;
+
     // ── LEXER ─────────────────────────────────────────────────
     Lexer lexer(source, true);
     auto tokens    = lexer.tokenize();
     auto lexErrors = lexer.getErrors();
+    res.tokenCount = (int)tokens.size() - 1; // exclude EOF
 
     for (const auto& t : tokens)
         if (t.type == TokenType::LINE_COMMENT || t.type == TokenType::BLOCK_COMMENT)
             ++res.commentCount;
 
-    if (verbose && debugMode) {
+    if (verbose && opts.debugMode) {
         std::cout << "\n" << BLUE << BOLD << "[LEXICAL ANALYSIS]\n" << RESET;
         printTokenTable(tokens);
         printCommentSummary(tokens);
@@ -462,7 +668,7 @@ static CompileResult compileSinglePass(const std::string& displayPath,
     res.parseOk = true;
 
     if (verbose) {
-        if (debugMode) {
+        if (opts.debugMode) {
             std::cout << BLUE << BOLD << "[AST — with OOP + I/O nodes]\n" << RESET;
             ast->print(0);
         } else {
@@ -472,6 +678,9 @@ static CompileResult compileSinglePass(const std::string& displayPath,
             std::cout << "-------------\n\n";
         }
     }
+
+    // NOTE: AST stats are now handled inside runGraphAnalysis so they
+    // are never printed twice. The old pre-codegen block was removed.
 
     // ── CODEGEN ───────────────────────────────────────────────
     CodeGen cg;
@@ -486,11 +695,9 @@ static CompileResult compileSinglePass(const std::string& displayPath,
 
     res.classCount = (int)cg.getClassInfos().size();
 
-    // ── REPORTS ───────────────────────────────────────────────
     if (verbose) {
-        if (!cg.getClassInfos().empty()) {
+        if (!cg.getClassInfos().empty())
             printClassRegistry(cg.getClassInfos());
-        }
         std::cout << "\n" << BOLD << CYAN
                   << "╔══════════════════════════════════════════════════════════╗\n"
                   << "║                   SYMBOL TABLE                          ║\n"
@@ -501,20 +708,20 @@ static CompileResult compileSinglePass(const std::string& displayPath,
 
     // ── OPTIMIZATION ──────────────────────────────────────────
     std::string irBefore;
-    if (optLevel != OptLevel::O0 && verbose)
+    if (opts.optLevel != OptLevel::O0 && verbose)
         irBefore = cg.getIRString();
 
-    if (optLevel != OptLevel::O0) {
+    if (opts.optLevel != OptLevel::O0) {
         if (verbose) {
-            const char* lvl = optLevel == OptLevel::O1 ? "O1" :
-                              optLevel == OptLevel::O2 ? "O2" : "O3";
+            const char* lvl = opts.optLevel == OptLevel::O1 ? "O1" :
+                              opts.optLevel == OptLevel::O2 ? "O2" : "O3";
             std::cout << "\n" << MAGENTA << BOLD
                       << "── Running optimizer (" << lvl << ") ──\n" << RESET;
         }
-        cg.optimize(optLevel);
+        cg.optimize(opts.optLevel);
         if (verbose) {
             std::string irAfter = cg.getIRString();
-            printOptReport(cg.getOptStats(), optLevel, irBefore, irAfter, showIrDiff);
+            printOptReport(cg.getOptStats(), opts.optLevel, irBefore, irAfter, opts.showIrDiff);
         }
     } else if (verbose) {
         std::cout << DIM << "\n  (Optimization disabled: --O0)\n" << RESET;
@@ -526,15 +733,36 @@ static CompileResult compileSinglePass(const std::string& displayPath,
 
     if (verbose && res.irOk) {
         std::cout << "\n--- [LLVM IR"
-                  << (optLevel != OptLevel::O0 ? " (optimized)" : "") << "] ---\n";
+                  << (opts.optLevel != OptLevel::O0 ? " (optimized)" : "") << "] ---\n";
         cg.dump();
         std::cout << YELLOW << "\n→ IR written to: " << res.llPath << RESET << "\n";
     }
 
+    // ── GRAPH / ANALYSIS OUTPUTS ──────────────────────────────
+    // BUG FIX: added showASTStats to the anyGraph check.
+    // Previously, passing only --ast-stats would set showASTStats=true
+    // but anyGraph remained false, so runGraphAnalysis was never called
+    // and no stats appeared.
+    bool anyGraph = opts.genCFG        || opts.genCFGAll    ||
+                    opts.genCallGraph  || opts.genASTGraph   ||
+                    opts.showComplexity|| opts.showDeadCode  ||
+                    opts.showASTStats;   // ← was missing before
+
+    if (anyGraph) {
+        if (verbose)
+            std::cout << "\n" << BOLD << MAGENTA
+                      << "╔══════════════════════════════════════════════════════════╗\n"
+                      << "║             PROGRAM ANALYSIS                            ║\n"
+                      << "╚══════════════════════════════════════════════════════════╝\n"
+                      << RESET;
+        runGraphAnalysis(cg, ast.get(), outDir, stem, opts, res, verbose);
+    }
+
     // ── BUILD (optional) ──────────────────────────────────────
-    if (buildBinaries && res.irOk) {
-        std::string llcCmd   = "llc -relocation-model=pic "   + res.llPath + " -filetype=obj -o " + objPath + " 2>/dev/null";
-        std::string clangCmd = "clang " + objPath    + " -o " + res.binPath            + " 2>/dev/null";
+    if (opts.buildBin && res.irOk) {
+        std::string llcCmd   = "llc -relocation-model=pic "
+                               + res.llPath + " -filetype=obj -o " + objPath + " 2>/dev/null";
+        std::string clangCmd = "clang " + objPath + " -o " + res.binPath + " 2>/dev/null";
         if (verbose) {
             std::cout << "\n" << BOLD << "Building...\n" << RESET
                       << "  $ " << llcCmd << "\n";
@@ -553,12 +781,16 @@ static CompileResult compileSinglePass(const std::string& displayPath,
         } else if (verbose) {
             std::cerr << RED << "[BUILD] llc/clang failed.\n" << RESET;
         }
-    } else if (!buildBinaries && verbose) {
+    } else if (!opts.buildBin && verbose) {
         std::cout << "\n" << BOLD << "Next steps:\n" << RESET
                   << "  llc "   << res.llPath << " -filetype=obj -o " << objPath << "\n"
                   << "  clang " << objPath    << " -o " << res.binPath << " -no-pie\n"
                   << "  " << res.binPath << " ; echo $?\n";
     }
+
+    // ── Print generated files ─────────────────────────────────
+    if (verbose && (!res.dotFiles.empty() || !res.pngFiles.empty()))
+        printGeneratedFiles(res, stem);
 
     return res;
 }
@@ -568,45 +800,39 @@ static CompileResult compileSinglePass(const std::string& displayPath,
 // ═════════════════════════════════════════════════════════════
 static CompileResult compileOne(const std::string& srcPath,
                                 const std::string& outDir,
-                                bool debugMode,
-                                bool buildBinaries,
                                 bool verbose,
-                                OptLevel optLevel,
-                                bool autoCorrect,
-                                bool showIrDiff)
+                                const CompileOptions& opts)
 {
     fs::path p(srcPath);
     std::string stem = p.stem().string();
 
     std::ifstream file(srcPath);
     if (!file.is_open()) {
-        if (verbose)
-            std::cerr << RED << "Cannot open: " << srcPath << RESET << "\n";
+        if (verbose) std::cerr << RED << "Cannot open: " << srcPath << RESET << "\n";
         return {};
     }
     std::stringstream buf; buf << file.rdbuf();
     std::string source = buf.str();
 
+    // Quick error probe pass (no keepComments, no display)
     Lexer lx1(source, false);
-    auto toks1     = lx1.tokenize();
-    auto lexErrs1  = lx1.getErrors();
+    auto toks1      = lx1.tokenize();
+    auto lexErrs1   = lx1.getErrors();
     Parser px1(toks1);
     auto ast1       = px1.parse();
     auto parseErrs1 = px1.getErrors();
     std::vector<CodeGenError> cgErrs1;
     if (lexErrs1.empty() && parseErrs1.empty() && ast1) {
-        CodeGen cg1;
-        cg1.generate(ast1.get());
+        CodeGen cg1; cg1.generate(ast1.get());
         cgErrs1 = cg1.getErrors();
     }
 
     bool hasErrors = !lexErrs1.empty() || !parseErrs1.empty() || !cgErrs1.empty();
 
     if (!hasErrors)
-        return compileSinglePass(srcPath, source, outDir, stem,
-                                 debugMode, buildBinaries, verbose, optLevel, showIrDiff);
+        return compileSinglePass(srcPath, source, outDir, stem, verbose, opts);
 
-    if (!autoCorrect) {
+    if (!opts.autoCorrect) {
         if (verbose) reportErrors(srcPath, lexErrs1, parseErrs1, cgErrs1);
         CompileResult bad;
         bad.errorCount = (int)lexErrs1.size() + (int)parseErrs1.size() + (int)cgErrs1.size();
@@ -661,13 +887,11 @@ static CompileResult compileOne(const std::string& srcPath,
             std::cout << (isFix ? std::string(GREEN) : std::string(DIM))
                       << std::setw(4) << ln++ << RESET << " │ " << cln << "\n";
         }
+        std::cout << "\n" << BOLD << "══ PASS 2: Compiling corrected source ══\n" << RESET;
     }
 
-    if (verbose)
-        std::cout << "\n" << BOLD << "══ PASS 2: Compiling corrected source ══\n" << RESET;
-
-    auto r2 = compileSinglePass(corrPath, corrected, outDir, stem + "_corrected",
-                                debugMode, buildBinaries, verbose, optLevel, showIrDiff);
+    auto r2 = compileSinglePass(corrPath, corrected, outDir,
+                                stem + "_corrected", verbose, opts);
 
     if (r2.parseOk && r2.irOk && verbose)
         std::cout << "\n" << GREEN << BOLD
@@ -686,9 +910,7 @@ static CompileResult compileOne(const std::string& srcPath,
 // ═════════════════════════════════════════════════════════════
 static void runTestSuite(const std::string& testDir,
                          const std::string& outDir,
-                         bool buildBinaries,
-                         bool autoCorrect,
-                         OptLevel optLevel)
+                         const CompileOptions& opts)
 {
     std::vector<std::string> files;
     for (auto& e : fs::directory_iterator(testDir))
@@ -701,20 +923,21 @@ static void runTestSuite(const std::string& testDir,
     }
     fs::create_directories(outDir);
 
-    const char* lvl = optLevel == OptLevel::O0 ? "O0" :
-                      optLevel == OptLevel::O1 ? "O1" :
-                      optLevel == OptLevel::O2 ? "O2" : "O3";
+    const char* lvl = opts.optLevel == OptLevel::O0 ? "O0" :
+                      opts.optLevel == OptLevel::O1 ? "O1" :
+                      opts.optLevel == OptLevel::O2 ? "O2" : "O3";
 
     std::cout << "\n" << BOLD
               << "╔══════════════════════════════════════════════════════════╗\n"
-              << "║       QUAIL COMPILER v3.1  —  BATCH TEST SUITE          ║\n"
+              << "║       QUAIL COMPILER v4.0  —  BATCH TEST SUITE          ║\n"
               << "╚══════════════════════════════════════════════════════════╝\n"
               << RESET
               << "  Test dir : " << testDir  << "\n"
               << "  Out dir  : " << outDir   << "\n"
               << "  Tests    : " << files.size() << "\n"
-              << "  Opt      : " << lvl          << "\n"
-              << "  AutoFix  : " << (autoCorrect ? "yes" : "no") << "\n\n";
+              << "  Opt      : " << lvl << "\n"
+              << "  AutoFix  : " << (opts.autoCorrect ? "yes" : "no") << "\n"
+              << "  Graphs   : " << ((opts.genCFG||opts.genCFGAll||opts.genCallGraph||opts.genASTGraph) ? "yes" : "no") << "\n\n";
 
     const int NW = 36, SW = 8;
     std::cout << BOLD << std::left
@@ -723,22 +946,23 @@ static void runTestSuite(const std::string& testDir,
               << std::setw(SW) << "IR"
               << std::setw(6)  << "Cmts"
               << std::setw(6)  << "Cls"
+              << std::setw(6)  << "Dots"
               << std::setw(10) << "Link"
               << std::setw(SW) << "Exit"
               << "IR path\n" << RESET
-              << std::string(NW + SW * 3 + 6 + 6 + 10 + 30, '-') << "\n";
+              << std::string(NW + SW * 3 + 6 + 6 + 6 + 10 + 30, '-') << "\n";
 
     int passed = 0, failed = 0;
     for (auto& srcPath : files) {
         std::string name = fs::path(srcPath).filename().string();
         std::cout << std::left << std::setw(NW) << name << std::flush;
-        CompileResult r = compileOne(srcPath, outDir, false, buildBinaries, false,
-                                     optLevel, autoCorrect, false);
+        CompileResult r = compileOne(srcPath, outDir, /*verbose=*/false, opts);
         std::cout << (r.parseOk ? std::string(GREEN)+"OK  "+RESET : std::string(RED)+"FAIL"+RESET) << "    ";
         std::cout << (r.irOk    ? std::string(GREEN)+"OK  "+RESET : std::string(RED)+"FAIL"+RESET) << "    ";
         std::cout << DIM << std::setw(6) << r.commentCount
-                        << std::setw(6) << r.classCount << RESET;
-        if (buildBinaries)
+                        << std::setw(6) << r.classCount
+                        << std::setw(6) << r.dotFiles.size() << RESET;
+        if (opts.buildBin)
             std::cout << (r.linkOk ? std::string(GREEN)+"linked    "+RESET
                                    : std::string(RED)  +"FAIL      "+RESET);
         else
@@ -752,7 +976,7 @@ static void runTestSuite(const std::string& testDir,
         if (r.parseOk && r.irOk) ++passed; else ++failed;
     }
 
-    std::cout << std::string(NW + SW * 3 + 6 + 6 + 10 + 30, '-') << "\n"
+    std::cout << std::string(NW + SW * 3 + 6 + 6 + 6 + 10 + 30, '-') << "\n"
               << BOLD << "Results: " << GREEN << passed << " passed" << RESET
               << "  /  " << (failed ? std::string(RED) : std::string(GREEN))
               << failed << " failed" << RESET
@@ -763,88 +987,122 @@ static void runTestSuite(const std::string& testDir,
 //  main
 // ═════════════════════════════════════════════════════════════
 int main(int argc, char* argv[]) {
-    bool        debugMode   = false;
-    bool        buildBin    = false;
-    bool        testAll     = false;
-    bool        autoCorrect = true;
-    bool        showIrDiff  = false;
-    OptLevel    optLevel    = OptLevel::O2;
-    std::string testDir     = "test";
-    std::string outDir      = "out";
+    CompileOptions opts;
+    bool        testAll   = false;
+    std::string testDir   = "test";
+    std::string outDir    = "out";
     std::string inputFile;
 
     for (int i = 1; i < argc; ++i) {
         std::string a = argv[i];
-        if      (a == "--debug")          debugMode   = true;
-        else if (a == "--build")          buildBin    = true;
-        else if (a == "--test-all")       testAll     = true;
-        else if (a == "--no-autocorrect") autoCorrect = false;
-        else if (a == "--show-ir-diff")   showIrDiff  = true;
-        else if (a == "--O0")             optLevel    = OptLevel::O0;
-        else if (a == "--O1")             optLevel    = OptLevel::O1;
-        else if (a == "--O2")             optLevel    = OptLevel::O2;
-        else if (a == "--O3")             optLevel    = OptLevel::O3;
+        // ── Mode flags ────────────────────────────────────────
+        if      (a == "--debug")          opts.debugMode     = true;
+        else if (a == "--build")          opts.buildBin      = true;
+        else if (a == "--test-all")       testAll            = true;
+        else if (a == "--no-autocorrect") opts.autoCorrect   = false;
+        else if (a == "--show-ir-diff")   opts.showIrDiff    = true;
+        // ── Optimization ──────────────────────────────────────
+        else if (a == "--O0")             opts.optLevel      = OptLevel::O0;
+        else if (a == "--O1")             opts.optLevel      = OptLevel::O1;
+        else if (a == "--O2")             opts.optLevel      = OptLevel::O2;
+        else if (a == "--O3")             opts.optLevel      = OptLevel::O3;
+        // ── Graph & analysis flags ────────────────────────────
+        else if (a == "--cfg")            opts.genCFG        = true;
+        else if (a == "--cfg-all")        opts.genCFGAll     = true;
+        else if (a == "--call-graph")     opts.genCallGraph  = true;
+        else if (a == "--ast-graph")      opts.genASTGraph   = true;
+        else if (a == "--ast-stats")      opts.showASTStats  = true;
+        else if (a == "--complexity")     opts.showComplexity= true;
+        else if (a == "--dead-code")      opts.showDeadCode  = true;
+        else if (a == "--render")         opts.renderGraphs  = true;
+        else if (a == "--graph") {
+            // Convenience: enable all graph + analysis outputs
+            opts.genCFG         = true;
+            opts.genCFGAll      = true;
+            opts.genCallGraph   = true;
+            opts.genASTGraph    = true;
+            opts.showASTStats   = true;
+            opts.showComplexity = true;
+            opts.showDeadCode   = true;
+        }
+        // ── Paths ─────────────────────────────────────────────
         else if (a == "--testdir" && i+1 < argc) testDir = argv[++i];
         else if (a == "--out"     && i+1 < argc) outDir  = argv[++i];
-        else if (a[0] != '-')             inputFile   = a;
+        else if (a[0] != '-')             inputFile = a;
     }
 
     if (testAll) {
-        runTestSuite(testDir, outDir, buildBin, autoCorrect, optLevel);
+        runTestSuite(testDir, outDir, opts);
         return 0;
     }
 
     if (inputFile.empty()) {
-        std::cout << BOLD << "Quail Compiler v3.1  (OOP + I/O edition)\n\n" << RESET
+        std::cout << BOLD << "Quail Compiler v4.0  (Analysis + OOP + I/O edition)\n\n" << RESET
                   << "Usage:\n"
                   << "  Single file : ./Quail_Compiler [OPTIONS] <file.mc>\n"
                   << "  All tests   : ./Quail_Compiler --test-all [OPTIONS]\n\n"
-                  << "OPTIONS:\n"
-                  << "  --debug           Token table + full AST\n"
+                  << "COMPILATION OPTIONS:\n"
+                  << "  --debug           Token table + full AST + class registry\n"
                   << "  --build           Compile to native binary and run\n"
-                  << "  --O0              No optimization\n"
-                  << "  --O1              Basic optimizations\n"
-                  << "  --O2              Standard (default)\n"
-                  << "  --O3              Aggressive\n"
-                  << "  --show-ir-diff    IR before/after optimization diff\n"
-                  << "  --no-autocorrect  Disable auto error correction\n"
+                  << "  --O0/O1/O2/O3     Optimization level (default: O2)\n"
+                  << "  --show-ir-diff    Print IR before and after optimization\n"
+                  << "  --no-autocorrect  Disable automatic syntax error correction\n\n"
+                  << "ANALYSIS & GRAPH OPTIONS:\n"
+                  << "  --cfg             Per-function CFG DOT file\n"
+                  << "  --cfg-all         All functions in one clustered CFG DOT\n"
+                  << "  --call-graph      Whole-program call graph DOT\n"
+                  << "  --ast-graph       AST visualisation DOT file\n"
+                  << "  --ast-stats       AST node count by category\n"
+                  << "  --complexity      Cyclomatic complexity per function\n"
+                  << "  --dead-code       Unreachable basic-block detection\n"
+                  << "  --render          Auto-render DOT → PNG (needs graphviz)\n"
+                  << "  --graph           Enable ALL of the above analysis outputs\n\n"
+                  << "PATH OPTIONS:\n"
                   << "  --testdir <dir>   Test directory (default: test/)\n"
                   << "  --out <dir>       Output directory (default: out/)\n\n"
-                  << "I/O language features (NEW in v3.1):\n"
-                  << "  println(\"Hello, World!\");       // print string + newline\n"
-                  << "  print(\"x = \", x);              // print string and int\n"
-                  << "  println(3.14);                 // print float\n"
-                  << "  println();                     // bare newline\n"
-                  << "  scan(x);                       // read int from stdin\n"
-                  << "  scan(a, b, c);                 // read multiple values\n\n"
-                  << "OOP language features:\n"
-                  << "  class Point { int x; int y; }\n"
-                  << "  int getX() { return this.x; }\n"
-                  << "  Point p;  p.x = 10;  p.getX();\n";
+                  << "EXAMPLES:\n"
+                  << "  # Full analysis with PNG output:\n"
+                  << "  ./Quail_Compiler --graph --render test/30_oop_complex.mc\n\n"
+                  << "  # CFG only, rendered:\n"
+                  << "  ./Quail_Compiler --cfg --render --O2 test/11_recursion_fib.mc\n\n"
+                  << "  # AST stats only:\n"
+                  << "  ./Quail_Compiler --ast-stats test/15_bubble_sort.mc\n\n"
+                  << "  # Complexity report:\n"
+                  << "  ./Quail_Compiler --complexity test/15_bubble_sort.mc\n\n"
+                  << "  # Build + run + all graphs:\n"
+                  << "  ./Quail_Compiler --build --graph --render test/21_class_basic.mc\n\n"
+                  << "GRAPHVIZ:\n"
+                  << "  Install:  sudo apt install graphviz\n"
+                  << "  Manual:   dot -Tpng out/file_cfg_main.dot -o cfg.png\n"
+                  << "            dot -Tsvg out/file_callgraph.dot -o cg.svg\n";
         return 1;
     }
 
     fs::create_directories(outDir);
     fs::path sp(inputFile);
-    const char* lvl = optLevel == OptLevel::O0 ? "O0" :
-                      optLevel == OptLevel::O1 ? "O1" :
-                      optLevel == OptLevel::O2 ? "O2" : "O3";
+    const char* lvl = opts.optLevel == OptLevel::O0 ? "O0" :
+                      opts.optLevel == OptLevel::O1 ? "O1" :
+                      opts.optLevel == OptLevel::O2 ? "O2" : "O3";
 
     std::string displayName = sp.filename().string();
     if (displayName.size() > 25) displayName = displayName.substr(0, 23) + "..";
 
+    bool anyGraph = opts.genCFG || opts.genCFGAll || opts.genCallGraph ||
+                    opts.genASTGraph || opts.showComplexity || opts.showDeadCode ||
+                    opts.showASTStats;
+
     std::cout << "\n" << BOLD
               << "╔══════════════════════════════════════════════════════╗\n"
-              << "║  Quail Compiler v3.1  →  "
+              << "║  Quail Compiler v4.0  →  "
               << std::left << std::setw(27) << displayName << "║\n"
               << "║  Opt: " << lvl
-              << "  │  Comments: ON  │  OOP: ON  │  AutoFix: "
-              << (autoCorrect ? "ON " : "OFF") << "  ║\n"
+              << "  │  AutoFix: " << (opts.autoCorrect ? "ON " : "OFF")
+              << "  │  Graphs: " << (anyGraph ? "ON " : "OFF")
+              << "  │  Render: " << (opts.renderGraphs ? "ON " : "OFF") << " ║\n"
               << "╚══════════════════════════════════════════════════════╝\n"
               << RESET << "\n";
 
-    CompileResult r = compileOne(inputFile, outDir, debugMode, buildBin, true,
-                                 optLevel, autoCorrect, showIrDiff);
+    CompileResult r = compileOne(inputFile, outDir, /*verbose=*/true, opts);
 
     if (r.errorCount > 0 || !r.parseOk || !r.irOk) return 1;
     std::cout << "\n" << GREEN << BOLD << "Compilation successful.\n" << RESET;

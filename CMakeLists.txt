@@ -12,7 +12,7 @@ message(STATUS "LLVM include dirs: ${LLVM_INCLUDE_DIRS}")
 include_directories(${LLVM_INCLUDE_DIRS})
 add_definitions(${LLVM_DEFINITIONS})
 
-# ── Project headers ───────────────────────────────────────────
+# ── Project headers (include/ at root) ────────────────────────
 include_directories(${CMAKE_SOURCE_DIR}/include)
 
 # ── Sources ───────────────────────────────────────────────────
@@ -24,6 +24,9 @@ set(SOURCES
     src/utils/Logger.cpp
     src/codegen/CodeGen.cpp
     src/autocorrect/AutoCorrector.cpp
+    # ── NEW: program-analysis passes (v4.0) ──────────────────
+    src/analysis/CFGAnalyzer.cpp
+    src/analysis/ASTGrapher.cpp
 )
 
 add_executable(Quail_Compiler ${SOURCES})
@@ -60,8 +63,21 @@ add_custom_command(TARGET Quail_Compiler POST_BUILD
     COMMENT "Creating out/ directory"
 )
 
+# ── Optional: check for graphviz (informational only) ─────────
+find_program(GRAPHVIZ_DOT dot)
+if(GRAPHVIZ_DOT)
+    message(STATUS "Graphviz found: ${GRAPHVIZ_DOT}  (--render flag will work)")
+else()
+    message(STATUS "Graphviz NOT found. Install with: sudo apt install graphviz")
+    message(STATUS "  DOT files will still be generated; render manually with:")
+    message(STATUS "  dot -Tpng out/file_cfg_main.dot -o cfg.png")
+endif()
+
 message(STATUS "")
 message(STATUS "Build complete. From the build/ directory:")
-message(STATUS "  Single file : ./Quail_Compiler [--debug] [--build] <file.mc>")
-message(STATUS "  All tests   : ./Quail_Compiler --test-all [--build]")
+message(STATUS "  Single file  : ./Quail_Compiler [--debug] [--build] <file.mc>")
+message(STATUS "  All tests    : ./Quail_Compiler --test-all [--build]")
+message(STATUS "  CFG graphs   : ./Quail_Compiler --cfg --render <file.mc>")
+message(STATUS "  All analysis : ./Quail_Compiler --graph --render <file.mc>")
+message(STATUS "  Complexity   : ./Quail_Compiler --complexity <file.mc>")
 message(STATUS "")

@@ -402,4 +402,6 @@ CMakeFiles/Quail_Compiler.dir/src/main.cpp.o: \
  /usr/lib/llvm-14/include/llvm/Support/CodeGen.h \
  /usr/lib/llvm-14/include/llvm/IR/Operator.h \
  /usr/lib/llvm-14/include/llvm/IR/ValueHandle.h \
- /home/pranaydadi/Documents/Quail_Compiler/include/autocorrect/AutoCorrector.h
+ /home/pranaydadi/Documents/Quail_Compiler/include/autocorrect/AutoCorrector.h \
+ /home/pranaydadi/Documents/Quail_Compiler/include/analysis/CFGAnalyzer.h \
+ /home/pranaydadi/Documents/Quail_Compiler/include/analysis/ASTGrapher.h

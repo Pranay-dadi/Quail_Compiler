@@ -8,6 +8,8 @@ set(CMAKE_DEPENDS_LANGUAGES
 
 # The set of dependency files which are needed:
 set(CMAKE_DEPENDS_DEPENDENCY_FILES
+  "/home/pranaydadi/Documents/Quail_Compiler/src/analysis/ASTGrapher.cpp" "CMakeFiles/Quail_Compiler.dir/src/analysis/ASTGrapher.cpp.o" "gcc" "CMakeFiles/Quail_Compiler.dir/src/analysis/ASTGrapher.cpp.o.d"
+  "/home/pranaydadi/Documents/Quail_Compiler/src/analysis/CFGAnalyzer.cpp" "CMakeFiles/Quail_Compiler.dir/src/analysis/CFGAnalyzer.cpp.o" "gcc" "CMakeFiles/Quail_Compiler.dir/src/analysis/CFGAnalyzer.cpp.o.d"
   "/home/pranaydadi/Documents/Quail_Compiler/src/autocorrect/AutoCorrector.cpp" "CMakeFiles/Quail_Compiler.dir/src/autocorrect/AutoCorrector.cpp.o" "gcc" "CMakeFiles/Quail_Compiler.dir/src/autocorrect/AutoCorrector.cpp.o.d"
   "/home/pranaydadi/Documents/Quail_Compiler/src/codegen/CodeGen.cpp" "CMakeFiles/Quail_Compiler.dir/src/codegen/CodeGen.cpp.o" "gcc" "CMakeFiles/Quail_Compiler.dir/src/codegen/CodeGen.cpp.o.d"
   "/home/pranaydadi/Documents/Quail_Compiler/src/lexer/Lexer.cpp" "CMakeFiles/Quail_Compiler.dir/src/lexer/Lexer.cpp.o" "gcc" "CMakeFiles/Quail_Compiler.dir/src/lexer/Lexer.cpp.o.d"

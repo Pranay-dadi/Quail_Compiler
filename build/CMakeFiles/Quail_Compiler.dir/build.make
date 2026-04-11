@@ -167,6 +167,34 @@ CMakeFiles/Quail_Compiler.dir/src/autocorrect/AutoCorrector.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Compiling CXX source to assembly CMakeFiles/Quail_Compiler.dir/src/autocorrect/AutoCorrector.cpp.s"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/pranaydadi/Documents/Quail_Compiler/src/autocorrect/AutoCorrector.cpp -o CMakeFiles/Quail_Compiler.dir/src/autocorrect/AutoCorrector.cpp.s
 
+CMakeFiles/Quail_Compiler.dir/src/analysis/CFGAnalyzer.cpp.o: CMakeFiles/Quail_Compiler.dir/flags.make
+CMakeFiles/Quail_Compiler.dir/src/analysis/CFGAnalyzer.cpp.o: ../src/analysis/CFGAnalyzer.cpp
+CMakeFiles/Quail_Compiler.dir/src/analysis/CFGAnalyzer.cpp.o: CMakeFiles/Quail_Compiler.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/pranaydadi/Documents/Quail_Compiler/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_8) "Building CXX object CMakeFiles/Quail_Compiler.dir/src/analysis/CFGAnalyzer.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/Quail_Compiler.dir/src/analysis/CFGAnalyzer.cpp.o -MF CMakeFiles/Quail_Compiler.dir/src/analysis/CFGAnalyzer.cpp.o.d -o CMakeFiles/Quail_Compiler.dir/src/analysis/CFGAnalyzer.cpp.o -c /home/pranaydadi/Documents/Quail_Compiler/src/analysis/CFGAnalyzer.cpp
+
+CMakeFiles/Quail_Compiler.dir/src/analysis/CFGAnalyzer.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Preprocessing CXX source to CMakeFiles/Quail_Compiler.dir/src/analysis/CFGAnalyzer.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /home/pranaydadi/Documents/Quail_Compiler/src/analysis/CFGAnalyzer.cpp > CMakeFiles/Quail_Compiler.dir/src/analysis/CFGAnalyzer.cpp.i
+
+CMakeFiles/Quail_Compiler.dir/src/analysis/CFGAnalyzer.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Compiling CXX source to assembly CMakeFiles/Quail_Compiler.dir/src/analysis/CFGAnalyzer.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/pranaydadi/Documents/Quail_Compiler/src/analysis/CFGAnalyzer.cpp -o CMakeFiles/Quail_Compiler.dir/src/analysis/CFGAnalyzer.cpp.s
+
+CMakeFiles/Quail_Compiler.dir/src/analysis/ASTGrapher.cpp.o: CMakeFiles/Quail_Compiler.dir/flags.make
+CMakeFiles/Quail_Compiler.dir/src/analysis/ASTGrapher.cpp.o: ../src/analysis/ASTGrapher.cpp
+CMakeFiles/Quail_Compiler.dir/src/analysis/ASTGrapher.cpp.o: CMakeFiles/Quail_Compiler.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/pranaydadi/Documents/Quail_Compiler/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_9) "Building CXX object CMakeFiles/Quail_Compiler.dir/src/analysis/ASTGrapher.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/Quail_Compiler.dir/src/analysis/ASTGrapher.cpp.o -MF CMakeFiles/Quail_Compiler.dir/src/analysis/ASTGrapher.cpp.o.d -o CMakeFiles/Quail_Compiler.dir/src/analysis/ASTGrapher.cpp.o -c /home/pranaydadi/Documents/Quail_Compiler/src/analysis/ASTGrapher.cpp
+
+CMakeFiles/Quail_Compiler.dir/src/analysis/ASTGrapher.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Preprocessing CXX source to CMakeFiles/Quail_Compiler.dir/src/analysis/ASTGrapher.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /home/pranaydadi/Documents/Quail_Compiler/src/analysis/ASTGrapher.cpp > CMakeFiles/Quail_Compiler.dir/src/analysis/ASTGrapher.cpp.i
+
+CMakeFiles/Quail_Compiler.dir/src/analysis/ASTGrapher.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Compiling CXX source to assembly CMakeFiles/Quail_Compiler.dir/src/analysis/ASTGrapher.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/pranaydadi/Documents/Quail_Compiler/src/analysis/ASTGrapher.cpp -o CMakeFiles/Quail_Compiler.dir/src/analysis/ASTGrapher.cpp.s
+
 # Object files for target Quail_Compiler
 Quail_Compiler_OBJECTS = \
 "CMakeFiles/Quail_Compiler.dir/src/main.cpp.o" \
@@ -175,7 +203,9 @@ Quail_Compiler_OBJECTS = \
 "CMakeFiles/Quail_Compiler.dir/src/semantic/SymbolTable.cpp.o" \
 "CMakeFiles/Quail_Compiler.dir/src/utils/Logger.cpp.o" \
 "CMakeFiles/Quail_Compiler.dir/src/codegen/CodeGen.cpp.o" \
-"CMakeFiles/Quail_Compiler.dir/src/autocorrect/AutoCorrector.cpp.o"
+"CMakeFiles/Quail_Compiler.dir/src/autocorrect/AutoCorrector.cpp.o" \
+"CMakeFiles/Quail_Compiler.dir/src/analysis/CFGAnalyzer.cpp.o" \
+"CMakeFiles/Quail_Compiler.dir/src/analysis/ASTGrapher.cpp.o"
 
 # External object files for target Quail_Compiler
 Quail_Compiler_EXTERNAL_OBJECTS =
@@ -187,6 +217,8 @@ Quail_Compiler: CMakeFiles/Quail_Compiler.dir/src/semantic/SymbolTable.cpp.o
 Quail_Compiler: CMakeFiles/Quail_Compiler.dir/src/utils/Logger.cpp.o
 Quail_Compiler: CMakeFiles/Quail_Compiler.dir/src/codegen/CodeGen.cpp.o
 Quail_Compiler: CMakeFiles/Quail_Compiler.dir/src/autocorrect/AutoCorrector.cpp.o
+Quail_Compiler: CMakeFiles/Quail_Compiler.dir/src/analysis/CFGAnalyzer.cpp.o
+Quail_Compiler: CMakeFiles/Quail_Compiler.dir/src/analysis/ASTGrapher.cpp.o
 Quail_Compiler: CMakeFiles/Quail_Compiler.dir/build.make
 Quail_Compiler: /usr/lib/llvm-14/lib/libLLVMCore.a
 Quail_Compiler: /usr/lib/llvm-14/lib/libLLVMSupport.a
@@ -243,7 +275,7 @@ Quail_Compiler: /usr/lib/x86_64-linux-gnu/libz.so
 Quail_Compiler: /usr/lib/x86_64-linux-gnu/libtinfo.so
 Quail_Compiler: /usr/lib/llvm-14/lib/libLLVMDemangle.a
 Quail_Compiler: CMakeFiles/Quail_Compiler.dir/link.txt
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --bold --progress-dir=/home/pranaydadi/Documents/Quail_Compiler/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_8) "Linking CXX executable Quail_Compiler"
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --bold --progress-dir=/home/pranaydadi/Documents/Quail_Compiler/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_10) "Linking CXX executable Quail_Compiler"
 	$(CMAKE_COMMAND) -E cmake_link_script CMakeFiles/Quail_Compiler.dir/link.txt --verbose=$(VERBOSE)
 	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --blue --bold "Copying test .mc files to build/test/"
 	/usr/bin/cmake -E copy_directory /home/pranaydadi/Documents/Quail_Compiler/test /home/pranaydadi/Documents/Quail_Compiler/build/test

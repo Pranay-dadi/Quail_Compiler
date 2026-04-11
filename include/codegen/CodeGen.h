@@ -75,6 +75,9 @@ public:
 
     const std::unordered_map<std::string, ClassInfo>& getClassInfos() const { return classInfos; }
 
+    // ── NEW (v4.0): exposes the LLVM Module to CFGAnalyzer ────
+    llvm::Module* getModule() const { return module.get(); }
+
 private:
     llvm::LLVMContext              context;
     llvm::IRBuilder<>              builder;
@@ -92,9 +95,8 @@ private:
     llvm::Value*  currentThisAlloca;
 
     // ── I/O runtime support ───────────────────────────────────
-    // Lazily declared on first use; nullptr until then.
-    llvm::Function* printfFunc = nullptr;   // i32 printf(i8*, ...)
-    llvm::Function* scanfFunc  = nullptr;   // i32 scanf(i8*, ...)
+    llvm::Function* printfFunc = nullptr;
+    llvm::Function* scanfFunc  = nullptr;
 
     // ── Helpers ───────────────────────────────────────────────
     void addError(const std::string& msg);
@@ -120,14 +122,9 @@ private:
                                   const std::string& tag = "");
 
     // ── I/O helpers ───────────────────────────────────────────
-    // Returns (or creates) the printf / scanf declaration in the module.
     llvm::Function* getOrDeclarePrintf();
     llvm::Function* getOrDeclareScanf();
+    llvm::Value*    buildFmtPtr(const std::string& fmt);
 
-    // Creates a private constant string global and returns a GEP i8* to it.
-    // Multiple calls with the same fmt string reuse the same global.
-    llvm::Value* buildFmtPtr(const std::string& fmt);
-
-    // Cache: format string content → its global variable
     std::unordered_map<std::string, llvm::GlobalVariable*> fmtCache;
 };
