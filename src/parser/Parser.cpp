@@ -1,6 +1,7 @@
 #include "parser/Parser.h"
 #include <iostream>
 #include <sstream>
+#include <cstring>
 
 Parser::Parser(const std::vector<Token>& t) : tokens(t), pos(0) {}
 
@@ -11,7 +12,9 @@ bool Parser::isComment(TokenType t) const {
 }
 
 bool Parser::isTypeKeyword(TokenType t) const {
-    return t == TokenType::INT || t == TokenType::FLOAT || t == TokenType::VOID;
+    return t == TokenType::INT    || t == TokenType::FLOAT
+        || t == TokenType::VOID   || t == TokenType::CONST
+        || t == TokenType::STRING_TYPE;
 }
 
 int Parser::currentLine() const {
@@ -87,7 +90,7 @@ int Parser::getPrecedence(TokenType type) {
     }
 }
 
-// ── Argument list parser (stops at ')') ───────────────────────
+// ── Argument list parser ───────────────────────────────────────
 std::vector<std::unique_ptr<AST>> Parser::parseArgList() {
     std::vector<std::unique_ptr<AST>> args;
     while (pos < tokens.size()
@@ -118,17 +121,34 @@ std::unique_ptr<AST> Parser::primary() {
         return std::make_unique<StringAST>(tok.lexeme);
     }
 
-    // ── this.field  /  this.method(args) ──────────────────────
+    // ── new ClassName / new int ───────────────────────────────
+    if (tok.type == TokenType::NEW) {
+        pos++;
+        if (pos >= tokens.size()) {
+            addError("Expected type or class name after 'new'"); return nullptr;
+        }
+        if (isTypeKeyword(tokens[pos].type) && tokens[pos].type != TokenType::VOID) {
+            ASTType t = tokenToASTType(tokens[pos].type);
+            pos++;
+            return std::make_unique<NewScalarAST>(t);
+        }
+        if (tokens[pos].type == TokenType::IDENT) {
+            std::string cn = tokens[pos++].lexeme;
+            return std::make_unique<NewExprAST>(cn);
+        }
+        addError("Expected type or class name after 'new'");
+        return nullptr;
+    }
+
+    // ── this.field / this.method(args) ────────────────────────
     if (tok.type == TokenType::THIS) {
         pos++;
         if (pos >= tokens.size() || tokens[pos].type != TokenType::DOT) {
-            addError("Expected '.' after 'this'");
-            return nullptr;
+            addError("Expected '.' after 'this'"); return nullptr;
         }
-        pos++; // consume DOT
+        pos++;
         if (pos >= tokens.size() || tokens[pos].type != TokenType::IDENT) {
-            addError("Expected member name after 'this.'");
-            return nullptr;
+            addError("Expected member name after 'this.'"); return nullptr;
         }
         std::string member = tokens[pos++].lexeme;
         if (pos < tokens.size() && tokens[pos].type == TokenType::LPAREN) {
@@ -139,6 +159,49 @@ std::unique_ptr<AST> Parser::primary() {
             return std::make_unique<MethodCallAST>("this", member, std::move(args));
         }
         return std::make_unique<ThisAccessAST>(member);
+    }
+
+    // ── super.method(args) ────────────────────────────────────
+    if (tok.type == TokenType::SUPER) {
+        pos++;
+        if (pos >= tokens.size() || tokens[pos].type != TokenType::DOT) {
+            addError("Expected '.' after 'super'"); return nullptr;
+        }
+        pos++;
+        if (pos >= tokens.size() || tokens[pos].type != TokenType::IDENT) {
+            addError("Expected method name after 'super.'"); return nullptr;
+        }
+        std::string method = tokens[pos++].lexeme;
+        if (pos < tokens.size() && tokens[pos].type == TokenType::LPAREN) {
+            pos++;
+            auto args = parseArgList();
+            if (pos < tokens.size() && tokens[pos].type == TokenType::RPAREN) pos++;
+            else addError("Missing ')' in super." + method + "()");
+            return std::make_unique<SuperCallAST>(method, std::move(args));
+        }
+        addError("super." + method + " must be called as a method");
+        return nullptr;
+    }
+
+    // ── & address-of ─────────────────────────────────────────
+    if (tok.type == TokenType::AMPERSAND) {
+        pos++;
+        if (pos >= tokens.size() || tokens[pos].type != TokenType::IDENT) {
+            addError("Expected variable name after '&'"); return nullptr;
+        }
+        std::string name = tokens[pos++].lexeme;
+        return std::make_unique<AddressOfAST>(name);
+    }
+
+    // ── Unary operators (-, !, *-dereference) ─────────────────
+    if (tok.type == TokenType::MINUS || tok.type == TokenType::NOT) {
+        std::string op = (tok.type == TokenType::MINUS) ? "-" : "!";
+        pos++;
+        auto operand = primary();
+        if (!operand) { addError("Expected expression after unary '" + op + "'"); return nullptr; }
+        auto u = std::make_unique<UnaryAST>();
+        u->op = op; u->operand = std::move(operand);
+        return u;
     }
 
     if (tok.type == TokenType::ASSIGN) {
@@ -158,14 +221,68 @@ std::unique_ptr<AST> Parser::primary() {
     if (tok.type == TokenType::IDENT) {
         std::string name = tok.lexeme; pos++;
 
-        // Post-increment  x++
+        // Post-increment x++
         if (pos < tokens.size() && tokens[pos].type == TokenType::INC) {
             pos++; return std::make_unique<PostIncAST>(name);
         }
 
-        // Member access / method call  obj.field  obj.method(args)
+        // Built-in string functions
+        if (name == "strlen" && pos < tokens.size() && tokens[pos].type == TokenType::LPAREN) {
+            pos++;
+            if (pos < tokens.size() && tokens[pos].type == TokenType::IDENT) {
+                std::string arg = tokens[pos++].lexeme;
+                if (pos < tokens.size() && tokens[pos].type == TokenType::RPAREN) pos++;
+                else addError("Missing ')' in strlen()");
+                return std::make_unique<StrLenAST>(arg);
+            } else {
+                // expression argument
+                auto argExpr = expression();
+                (void)argExpr;
+                if (pos < tokens.size() && tokens[pos].type == TokenType::RPAREN) pos++;
+                return std::make_unique<StrLenAST>("?");
+            }
+        }
+        if (name == "strcmp" && pos < tokens.size() && tokens[pos].type == TokenType::LPAREN) {
+            pos++;
+            auto lhs = expression();
+            if (pos < tokens.size() && tokens[pos].type == TokenType::COMMA) pos++;
+            auto rhs = expression();
+            if (pos < tokens.size() && tokens[pos].type == TokenType::RPAREN) pos++;
+            else addError("Missing ')' in strcmp()");
+            return std::make_unique<StrCmpAST>(std::move(lhs), std::move(rhs));
+        }
+        if (name == "strcat" && pos < tokens.size() && tokens[pos].type == TokenType::LPAREN) {
+            pos++;
+            std::string dest, src;
+            if (pos < tokens.size() && tokens[pos].type == TokenType::IDENT) dest = tokens[pos++].lexeme;
+            if (pos < tokens.size() && tokens[pos].type == TokenType::COMMA) pos++;
+            if (pos < tokens.size() && tokens[pos].type == TokenType::IDENT) src  = tokens[pos++].lexeme;
+            if (pos < tokens.size() && tokens[pos].type == TokenType::RPAREN) pos++;
+            else addError("Missing ')' in strcat()");
+            return std::make_unique<StrCatAST>(dest, src);
+        }
+
+        // Arrow member access: ptr->field or ptr->method()
+        if (pos < tokens.size() && tokens[pos].type == TokenType::ARROW) {
+            pos++;
+            if (pos >= tokens.size() || tokens[pos].type != TokenType::IDENT) {
+                addError("Expected member name after '->' on '" + name + "'");
+                return nullptr;
+            }
+            std::string member = tokens[pos++].lexeme;
+            if (pos < tokens.size() && tokens[pos].type == TokenType::LPAREN) {
+                pos++;
+                auto args = parseArgList();
+                if (pos < tokens.size() && tokens[pos].type == TokenType::RPAREN) pos++;
+                else addError("Missing ')' in " + name + "->" + member + "()");
+                return std::make_unique<MethodCallAST>(name, member, std::move(args));
+            }
+            return std::make_unique<ArrowAccessAST>(name, member);
+        }
+
+        // Dot member access / method call
         if (pos < tokens.size() && tokens[pos].type == TokenType::DOT) {
-            pos++; // consume DOT
+            pos++;
             if (pos >= tokens.size() || tokens[pos].type != TokenType::IDENT) {
                 addError("Expected member name after '.' on '" + name + "'");
                 return nullptr;
@@ -181,7 +298,7 @@ std::unique_ptr<AST> Parser::primary() {
             return std::make_unique<MemberAccessAST>(name, member);
         }
 
-        // Function call  name(args)
+        // Function call
         if (pos < tokens.size() && tokens[pos].type == TokenType::LPAREN) {
             pos++;
             auto args = parseArgList();
@@ -192,7 +309,7 @@ std::unique_ptr<AST> Parser::primary() {
             return call;
         }
 
-        // Array access  name[idx]
+        // Array access
         if (pos < tokens.size() && tokens[pos].type == TokenType::LBRACKET) {
             pos++;
             auto idx = expression();
@@ -211,16 +328,6 @@ std::unique_ptr<AST> Parser::primary() {
         if (pos < tokens.size() && tokens[pos].type == TokenType::RPAREN) pos++;
         else addError("Missing ')' in parenthesised expression");
         return expr;
-    }
-
-    if (tok.type == TokenType::MINUS || tok.type == TokenType::NOT) {
-        std::string op = (tok.type == TokenType::MINUS) ? "-" : "!";
-        pos++;
-        auto operand = primary();
-        if (!operand) { addError("Expected expression after unary '" + op + "'"); return nullptr; }
-        auto u = std::make_unique<UnaryAST>();
-        u->op = op; u->operand = std::move(operand);
-        return u;
     }
 
     addError("Unexpected token '" + tok.lexeme + "' in expression");
@@ -309,36 +416,37 @@ std::unique_ptr<AST> Parser::statement() {
     if (tok.type == TokenType::LBRACE)
         return block();
 
-    // ── print(expr, ...) / println(expr, ...) ─────────────────
-    // Syntax:
-    //   print(expr1, expr2, ...);    ← no newline
-    //   println(expr1, expr2, ...);  ← newline after last value
-    //   println();                   ← bare newline
-    //   print("text", x, 3.14);     ← strings, ints, floats all fine
+    // ── delete ptr; ───────────────────────────────────────────
+    if (tok.type == TokenType::DELETE) {
+        pos++;
+        if (pos >= tokens.size() || tokens[pos].type != TokenType::IDENT) {
+            addError("Expected pointer variable name after 'delete'");
+            syncStatement(); return nullptr;
+        }
+        std::string ptrName = tokens[pos++].lexeme;
+        if (pos < tokens.size() && tokens[pos].type == TokenType::SEMI) pos++;
+        else addError("Missing ';' after delete statement");
+        return std::make_unique<DeleteAST>(ptrName);
+    }
+
+    // ── print / println ───────────────────────────────────────
     if (tok.type == TokenType::PRINT || tok.type == TokenType::PRINTLN) {
         bool nl = (tok.type == TokenType::PRINTLN);
         const std::string kw = nl ? "println" : "print";
         pos++;
 
-        // Require opening '('
-        if (pos < tokens.size() && tokens[pos].type == TokenType::LPAREN) {
-            pos++;
-        } else {
-            addError("Expected '(' after '" + kw + "'");
-        }
+        if (pos < tokens.size() && tokens[pos].type == TokenType::LPAREN) pos++;
+        else addError("Expected '(' after '" + kw + "'");
 
-        // Collect comma-separated expressions (may be empty)
         std::vector<std::unique_ptr<AST>> exprs;
         while (pos < tokens.size()
                && tokens[pos].type != TokenType::RPAREN
                && tokens[pos].type != TokenType::EOF_TOK) {
             while (pos < tokens.size() && isComment(tokens[pos].type)) pos++;
             if (pos < tokens.size() && tokens[pos].type == TokenType::RPAREN) break;
-
             auto e = expression();
             if (e) exprs.push_back(std::move(e));
             else { addError("Invalid expression in '" + kw + "'"); syncStatement(); return nullptr; }
-
             if (pos < tokens.size() && tokens[pos].type == TokenType::COMMA) pos++;
         }
 
@@ -351,19 +459,11 @@ std::unique_ptr<AST> Parser::statement() {
         return std::make_unique<PrintAST>(std::move(exprs), nl);
     }
 
-    // ── scan(var1, var2, ...) ──────────────────────────────────
-    // Syntax:
-    //   scan(x);          ← read one value into x
-    //   scan(a, b, c);    ← read multiple values
-    // Only simple variable names are accepted (not expressions).
+    // ── scan ──────────────────────────────────────────────────
     if (tok.type == TokenType::SCAN) {
         pos++;
-
-        if (pos < tokens.size() && tokens[pos].type == TokenType::LPAREN) {
-            pos++;
-        } else {
-            addError("Expected '(' after 'scan'");
-        }
+        if (pos < tokens.size() && tokens[pos].type == TokenType::LPAREN) pos++;
+        else addError("Expected '(' after 'scan'");
 
         std::vector<std::string> vars;
         while (pos < tokens.size()
@@ -371,34 +471,102 @@ std::unique_ptr<AST> Parser::statement() {
                && tokens[pos].type != TokenType::EOF_TOK) {
             while (pos < tokens.size() && isComment(tokens[pos].type)) pos++;
             if (pos < tokens.size() && tokens[pos].type == TokenType::RPAREN) break;
-
             if (tokens[pos].type == TokenType::IDENT) {
                 vars.push_back(tokens[pos++].lexeme);
             } else {
                 addError("Expected variable name in 'scan' (got '" + tokens[pos].lexeme + "')");
-                pos++; // skip bad token
+                pos++;
             }
-
             if (pos < tokens.size() && tokens[pos].type == TokenType::COMMA) pos++;
         }
-
         if (vars.empty()) addError("'scan' requires at least one variable name");
-
         if (pos < tokens.size() && tokens[pos].type == TokenType::RPAREN) pos++;
         else addError("Missing ')' after 'scan' arguments");
-
         if (pos < tokens.size() && tokens[pos].type == TokenType::SEMI) pos++;
         else addError("Missing ';' after 'scan' statement");
-
         return std::make_unique<ScanAST>(std::move(vars));
     }
 
-    // ── this.field = expr;  (inside method) ───────────────────
+    // ── switch ────────────────────────────────────────────────
+    if (tok.type == TokenType::SWITCH) {
+        pos++;
+        if (pos < tokens.size() && tokens[pos].type == TokenType::LPAREN) pos++;
+        else addError("Expected '(' after 'switch'");
+
+        auto expr = expression();
+        if (!expr) { addError("Invalid switch expression"); syncStatement(); return nullptr; }
+
+        if (pos < tokens.size() && tokens[pos].type == TokenType::RPAREN) pos++;
+        else addError("Missing ')' after switch expression");
+
+        if (pos < tokens.size() && tokens[pos].type == TokenType::LBRACE) pos++;
+        else addError("Expected '{' after switch(...)");
+
+        auto node = std::make_unique<SwitchAST>();
+        node->expr = std::move(expr);
+
+        while (pos < tokens.size()
+               && tokens[pos].type != TokenType::RBRACE
+               && tokens[pos].type != TokenType::EOF_TOK)
+        {
+            while (pos < tokens.size() && isComment(tokens[pos].type)) pos++;
+            if (pos >= tokens.size() || tokens[pos].type == TokenType::RBRACE) break;
+
+            CaseClause clause;
+
+            if (tokens[pos].type == TokenType::CASE) {
+                pos++;
+                clause.value = expression();
+                if (!clause.value) { addError("Expected value after 'case'"); syncStatement(); continue; }
+                if (pos < tokens.size() && tokens[pos].type == TokenType::COLON) pos++;
+                else addError("Expected ':' after case value");
+            } else if (tokens[pos].type == TokenType::DEFAULT) {
+                pos++;
+                if (pos < tokens.size() && tokens[pos].type == TokenType::COLON) pos++;
+                else addError("Expected ':' after 'default'");
+                clause.value = nullptr;
+            } else {
+                addError("Expected 'case' or 'default' inside switch");
+                pos++; continue;
+            }
+
+            while (pos < tokens.size()
+                   && tokens[pos].type != TokenType::CASE
+                   && tokens[pos].type != TokenType::DEFAULT
+                   && tokens[pos].type != TokenType::RBRACE
+                   && tokens[pos].type != TokenType::EOF_TOK)
+            {
+                while (pos < tokens.size() && isComment(tokens[pos].type)) pos++;
+                if (pos >= tokens.size()
+                    || tokens[pos].type == TokenType::CASE
+                    || tokens[pos].type == TokenType::DEFAULT
+                    || tokens[pos].type == TokenType::RBRACE) break;
+
+                if (tokens[pos].type == TokenType::BREAK) {
+                    pos++;
+                    if (pos < tokens.size() && tokens[pos].type == TokenType::SEMI) pos++;
+                    clause.hasBreak = true;
+                    break;
+                }
+                auto stmt = statement();
+                if (stmt) clause.body.push_back(std::move(stmt));
+            }
+
+            node->cases.push_back(std::move(clause));
+        }
+
+        if (pos < tokens.size() && tokens[pos].type == TokenType::RBRACE) pos++;
+        else addError("Missing '}' at end of switch");
+
+        return node;
+    }
+
+    // ── this.field = expr; ────────────────────────────────────
     if (tok.type == TokenType::THIS
         && pos+1 < tokens.size() && tokens[pos+1].type == TokenType::DOT)
     {
         size_t savedPos = pos;
-        pos += 2; // skip this + .
+        pos += 2;
         if (pos < tokens.size() && tokens[pos].type == TokenType::IDENT) {
             std::string field = tokens[pos++].lexeme;
             if (pos < tokens.size() && tokens[pos].type == TokenType::ASSIGN) {
@@ -413,7 +581,27 @@ std::unique_ptr<AST> Parser::statement() {
         pos = savedPos;
     }
 
-    // ── obj.field = expr;  (member assignment) ────────────────
+    // ── ptr->field = expr; ────────────────────────────────────
+    if (tok.type == TokenType::IDENT
+        && pos+1 < tokens.size() && tokens[pos+1].type == TokenType::ARROW)
+    {
+        size_t savedPos = pos;
+        std::string ptrName = tokens[pos].lexeme; pos += 2;
+        if (pos < tokens.size() && tokens[pos].type == TokenType::IDENT) {
+            std::string member = tokens[pos++].lexeme;
+            if (pos < tokens.size() && tokens[pos].type == TokenType::ASSIGN) {
+                pos++;
+                auto val = expression();
+                if (!val) { addError("Invalid rhs in '" + ptrName + "->" + member + " = ...'"); syncStatement(); return nullptr; }
+                if (pos < tokens.size() && tokens[pos].type == TokenType::SEMI) pos++;
+                else addError("Missing ';' after arrow member assignment");
+                return std::make_unique<ArrowAssignAST>(ptrName, member, std::move(val));
+            }
+        }
+        pos = savedPos;
+    }
+
+    // ── obj.field = expr; ─────────────────────────────────────
     if (tok.type == TokenType::IDENT
         && pos+1 < tokens.size() && tokens[pos+1].type == TokenType::DOT)
     {
@@ -433,7 +621,24 @@ std::unique_ptr<AST> Parser::statement() {
         pos = savedPos;
     }
 
-    // ── Object declaration  ClassName varName; ────────────────
+    // ── *ptr = expr; (dereference assignment) ─────────────────
+    if (tok.type == TokenType::MUL) {
+        size_t savedPos = pos;
+        pos++;
+        auto ptrExpr = primary();
+        if (ptrExpr && pos < tokens.size() && tokens[pos].type == TokenType::ASSIGN) {
+            pos++;
+            auto val = expression();
+            if (!val) { addError("Invalid rhs in dereference assignment"); syncStatement(); return nullptr; }
+            if (pos < tokens.size() && tokens[pos].type == TokenType::SEMI) pos++;
+            else addError("Missing ';' after dereference assignment");
+            return std::make_unique<DerefAssignAST>(std::move(ptrExpr), std::move(val));
+        }
+        // Not an assignment — backtrack
+        pos = savedPos;
+    }
+
+    // ── Object declaration: ClassName varName; ────────────────
     if (tok.type == TokenType::IDENT
         && classNames.count(tok.lexeme)
         && pos+1 < tokens.size() && tokens[pos+1].type == TokenType::IDENT)
@@ -446,7 +651,7 @@ std::unique_ptr<AST> Parser::statement() {
         return std::make_unique<ObjectDeclAST>(className, varName);
     }
 
-    // ── Array assignment  name[idx] = expr; ───────────────────
+    // ── Array assignment: name[idx] = expr; ───────────────────
     if (tok.type == TokenType::IDENT
         && pos+1 < tokens.size()
         && tokens[pos+1].type == TokenType::LBRACKET)
@@ -457,7 +662,8 @@ std::unique_ptr<AST> Parser::statement() {
         if (pos < tokens.size() && tokens[pos].type == TokenType::RBRACKET) pos++;
         else addError("Missing ']' in array assignment to '" + name + "'");
         if (pos >= tokens.size() || tokens[pos].type != TokenType::ASSIGN) {
-            addError("Expected '=' after '" + name + "[...]'"); syncStatement(); return nullptr; }
+            addError("Expected '=' after '" + name + "[...]'"); syncStatement(); return nullptr;
+        }
         pos++;
         auto val = expression();
         if (!val) { addError("Invalid value in assignment to '" + name + "[...]'"); syncStatement(); return nullptr; }
@@ -466,7 +672,7 @@ std::unique_ptr<AST> Parser::statement() {
         return std::make_unique<ArrayAssignAST>(name, std::move(idx), std::move(val));
     }
 
-    // ── Simple assignment  name = expr; ───────────────────────
+    // ── Simple assignment: name = expr; ───────────────────────
     if (tok.type == TokenType::IDENT
         && pos+1 < tokens.size()
         && tokens[pos+1].type == TokenType::ASSIGN)
@@ -479,19 +685,89 @@ std::unique_ptr<AST> Parser::statement() {
         return std::make_unique<AssignAST>(name, std::move(val));
     }
 
-    // ── Variable / array declaration ──────────────────────────
+    // ── Variable / array / pointer / const / string declaration
     if (isTypeKeyword(tok.type)) {
+
+        // ── const type name = expr; ───────────────────────────
+        if (tok.type == TokenType::CONST) {
+            pos++;
+            if (pos >= tokens.size() || !isTypeKeyword(tokens[pos].type)) {
+                addError("Expected type keyword after 'const'"); syncStatement(); return nullptr;
+            }
+            ASTType declType = tokenToASTType(tokens[pos].type);
+            pos++;
+            if (pos >= tokens.size() || tokens[pos].type != TokenType::IDENT) {
+                addError("Expected variable name after 'const <type>'"); syncStatement(); return nullptr;
+            }
+            std::string name = tokens[pos++].lexeme;
+            if (pos >= tokens.size() || tokens[pos].type != TokenType::ASSIGN) {
+                addError("const variable '" + name + "' must be initialized at declaration");
+                syncStatement(); return nullptr;
+            }
+            pos++;
+            auto initExpr = expression();
+            if (!initExpr) { addError("Expected initializer for const '" + name + "'"); syncStatement(); return nullptr; }
+            if (pos < tokens.size() && tokens[pos].type == TokenType::SEMI) pos++;
+            else addError("Missing ';' after const declaration of '" + name + "'");
+            return std::make_unique<ConstVarDeclInitAST>(name, declType, std::move(initExpr));
+        }
+
+        // ── string name = expr; ───────────────────────────────
+        if (tok.type == TokenType::STRING_TYPE) {
+            pos++;
+            if (pos >= tokens.size() || tokens[pos].type != TokenType::IDENT) {
+                addError("Expected variable name after 'string'"); syncStatement(); return nullptr;
+            }
+            std::string name = tokens[pos++].lexeme;
+            std::unique_ptr<AST> init;
+            if (pos < tokens.size() && tokens[pos].type == TokenType::ASSIGN) {
+                pos++;
+                init = expression();
+                if (!init) { addError("Expected initializer for string '" + name + "'"); syncStatement(); return nullptr; }
+            }
+            if (pos < tokens.size() && tokens[pos].type == TokenType::SEMI) pos++;
+            else addError("Missing ';' after string declaration of '" + name + "'");
+            return std::make_unique<StringVarDeclAST>(name, std::move(init));
+        }
+
         ASTType declType = tokenToASTType(tok.type);
         pos++;
-        if (pos >= tokens.size() || tokens[pos].type != TokenType::IDENT) {
-            addError("Expected variable name after type keyword"); syncStatement(); return nullptr; }
+
+        if (pos >= tokens.size()) {
+            addError("Expected variable name after type keyword"); syncStatement(); return nullptr;
+        }
+
+        // Pointer declaration: type* name; or type* name = expr;
+        if (tokens[pos].type == TokenType::MUL) {
+            pos++;
+            if (pos >= tokens.size() || tokens[pos].type != TokenType::IDENT) {
+                addError("Expected pointer variable name"); syncStatement(); return nullptr;
+            }
+            std::string pname = tokens[pos++].lexeme;
+            if (pos < tokens.size() && tokens[pos].type == TokenType::ASSIGN) {
+                pos++;
+                auto initExpr = expression();
+                if (!initExpr) { addError("Expected initializer for pointer '" + pname + "'"); syncStatement(); return nullptr; }
+                if (pos < tokens.size() && tokens[pos].type == TokenType::SEMI) pos++;
+                else addError("Missing ';' after pointer declaration of '" + pname + "'");
+                return std::make_unique<PtrVarDeclInitAST>(pname, declType, std::move(initExpr));
+            }
+            if (pos < tokens.size() && tokens[pos].type == TokenType::SEMI) pos++;
+            else addError("Missing ';' after pointer declaration of '" + pname + "'");
+            return std::make_unique<PtrVarDeclAST>(pname, declType);
+        }
+
+        if (tokens[pos].type != TokenType::IDENT) {
+            addError("Expected variable name after type keyword"); syncStatement(); return nullptr;
+        }
         std::string name = tokens[pos++].lexeme;
 
-        // Array declaration  type name[size];
+        // Array declaration: type name[size];
         if (pos < tokens.size() && tokens[pos].type == TokenType::LBRACKET) {
             pos++;
             if (pos >= tokens.size() || tokens[pos].type != TokenType::NUMBER) {
-                addError("Expected size in array declaration '" + name + "[...]'"); syncStatement(); return nullptr; }
+                addError("Expected size in array declaration '" + name + "[...]'"); syncStatement(); return nullptr;
+            }
             int size = std::stoi(tokens[pos++].lexeme);
             if (size <= 0) { addError("Array size must be positive"); syncStatement(); return nullptr; }
             if (pos < tokens.size() && tokens[pos].type == TokenType::RBRACKET) pos++;
@@ -501,7 +777,7 @@ std::unique_ptr<AST> Parser::statement() {
             return std::make_unique<ArrayDeclAST>(name, size, declType);
         }
 
-        // Declaration with initialiser  type name = expr;
+        // Declaration with initialiser
         if (pos < tokens.size() && tokens[pos].type == TokenType::ASSIGN) {
             pos++;
             auto initExpr = expression();
@@ -511,7 +787,7 @@ std::unique_ptr<AST> Parser::statement() {
             return std::make_unique<VarDeclInitAST>(name, declType, std::move(initExpr));
         }
 
-        // Plain declaration  type name;
+        // Plain declaration
         if (pos < tokens.size() && tokens[pos].type == TokenType::SEMI) {
             pos++;
             return std::make_unique<VarDeclAST>(name, declType);
@@ -520,7 +796,7 @@ std::unique_ptr<AST> Parser::statement() {
         syncStatement(); return nullptr;
     }
 
-    // ── return ─────────────────────────────────────────────────
+    // ── return ────────────────────────────────────────────────
     if (tok.type == TokenType::RETURN) {
         pos++;
         while (pos < tokens.size() && isComment(tokens[pos].type)) pos++;
@@ -532,7 +808,7 @@ std::unique_ptr<AST> Parser::statement() {
         return std::make_unique<ReturnAST>(std::move(expr));
     }
 
-    // ── if / if-else ───────────────────────────────────────────
+    // ── if / if-else ──────────────────────────────────────────
     if (tok.type == TokenType::IF) {
         pos++;
         if (pos < tokens.size() && tokens[pos].type == TokenType::LPAREN) pos++;
@@ -550,7 +826,7 @@ std::unique_ptr<AST> Parser::statement() {
         return node;
     }
 
-    // ── while ──────────────────────────────────────────────────
+    // ── while ─────────────────────────────────────────────────
     if (tok.type == TokenType::WHILE) {
         pos++;
         if (pos < tokens.size() && tokens[pos].type == TokenType::LPAREN) pos++;
@@ -565,7 +841,7 @@ std::unique_ptr<AST> Parser::statement() {
         return node;
     }
 
-    // ── for ────────────────────────────────────────────────────
+    // ── for ───────────────────────────────────────────────────
     if (tok.type == TokenType::FOR) {
         pos++;
         if (pos < tokens.size() && tokens[pos].type == TokenType::LPAREN) pos++;
@@ -593,7 +869,7 @@ std::unique_ptr<AST> Parser::statement() {
                                         std::move(inc), std::move(body));
     }
 
-    // ── break / continue ───────────────────────────────────────
+    // ── break / continue ──────────────────────────────────────
     if (tok.type == TokenType::BREAK) {
         pos++;
         if (pos < tokens.size() && tokens[pos].type == TokenType::SEMI) pos++;
@@ -607,7 +883,7 @@ std::unique_ptr<AST> Parser::statement() {
         return std::make_unique<ContinueAST>();
     }
 
-    // ── Expression statement (inc. method calls, post-inc) ─────
+    // ── Expression statement (method calls, post-inc, etc.) ───
     auto expr = expression();
     if (!expr) {
         addError("Unrecognised statement starting with '" + tok.lexeme + "'");
@@ -625,15 +901,20 @@ std::unique_ptr<FunctionAST> Parser::function() {
         addError("Expected return type (int/float/void) for function");
         return nullptr;
     }
+    // Skip override modifier
+    if (pos < tokens.size() && tokens[pos].type == TokenType::OVERRIDE) pos++;
+
     ASTType retType = tokenToASTType(tokens[pos].type);
     pos++;
 
     if (pos >= tokens.size() || tokens[pos].type != TokenType::IDENT) {
-        addError("Expected function name after return type"); return nullptr; }
+        addError("Expected function name after return type"); return nullptr;
+    }
     std::string name = tokens[pos++].lexeme;
 
     if (pos >= tokens.size() || tokens[pos].type != TokenType::LPAREN) {
-        addError("Expected '(' after function name '" + name + "'"); return nullptr; }
+        addError("Expected '(' after function name '" + name + "'"); return nullptr;
+    }
     pos++;
 
     std::vector<std::string> args;
@@ -677,20 +958,27 @@ std::unique_ptr<ClassDeclAST> Parser::parseClass() {
     pos++; // consume 'class'
 
     if (pos >= tokens.size() || tokens[pos].type != TokenType::IDENT) {
-        addError("Expected class name after 'class'");
-        return nullptr;
+        addError("Expected class name after 'class'"); return nullptr;
     }
     std::string name = tokens[pos++].lexeme;
     classNames.insert(name);
 
+    auto cls  = std::make_unique<ClassDeclAST>();
+    cls->name = name;
+
+    // Optional: extends ParentClass
+    if (pos < tokens.size() && tokens[pos].type == TokenType::EXTENDS) {
+        pos++;
+        if (pos >= tokens.size() || tokens[pos].type != TokenType::IDENT) {
+            addError("Expected parent class name after 'extends'"); return nullptr;
+        }
+        cls->parentName = tokens[pos++].lexeme;
+    }
+
     if (pos >= tokens.size() || tokens[pos].type != TokenType::LBRACE) {
-        addError("Expected '{' after class name '" + name + "'");
-        return nullptr;
+        addError("Expected '{' after class name '" + name + "'"); return nullptr;
     }
     pos++;
-
-    auto cls = std::make_unique<ClassDeclAST>();
-    cls->name = name;
 
     while (pos < tokens.size()
            && tokens[pos].type != TokenType::RBRACE
@@ -698,7 +986,9 @@ std::unique_ptr<ClassDeclAST> Parser::parseClass() {
     {
         if (isComment(tokens[pos].type)) { pos++; continue; }
 
-        if (tokens[pos].type == TokenType::PUBLIC || tokens[pos].type == TokenType::PRIVATE) {
+        if (tokens[pos].type == TokenType::PUBLIC  ||
+            tokens[pos].type == TokenType::PRIVATE  ||
+            tokens[pos].type == TokenType::OVERRIDE) {
             pos++; continue;
         }
 
@@ -724,7 +1014,8 @@ std::unique_ptr<ClassDeclAST> Parser::parseClass() {
             pos++;
             cls->fields.push_back({memberName, declType});
         } else {
-            addError("Expected ';' or '(' after member '" + memberName + "' in class '" + name + "'");
+            addError("Expected ';' or '(' after member '" + memberName
+                     + "' in class '" + name + "'");
             syncStatement();
         }
     }

@@ -41,20 +41,24 @@ struct CodeGenError {
 // ── Class metadata stored during codegen ─────────────────────
 struct ClassInfo {
     std::string name;
-    std::vector<std::pair<std::string, ValueType>> fields;  // (fieldName, type) in order
+    std::string parentName;  // "" = no parent
+    std::vector<std::pair<std::string, ValueType>> fields;     // own fields
+    std::vector<std::pair<std::string, ValueType>> allFields;  // own + inherited
     llvm::StructType* llvmType = nullptr;
 
     int fieldIndex(const std::string& fname) const {
-        for (int i = 0; i < (int)fields.size(); i++)
-            if (fields[i].first == fname) return i;
+        for (int i = 0; i < (int)allFields.size(); i++)
+            if (allFields[i].first == fname) return i;
         return -1;
     }
 
     ValueType fieldType(const std::string& fname) const {
-        for (auto& [n, t] : fields)
+        for (auto& [n, t] : allFields)
             if (n == fname) return t;
         return ValueType::Unknown;
     }
+
+    bool hasParent() const { return !parentName.empty(); }
 };
 
 class CodeGen {
@@ -68,15 +72,25 @@ public:
     void         dumpToFile(const std::string& filename);
     void         dump();
 
+    // Set LLVM target triple (for cross-compilation, e.g. AArch64)
+    void setTargetTriple(const std::string& triple) {
+        if (!triple.empty()) module->setTargetTriple(triple);
+    }
+
     bool hasErrors() const { return !errors.empty(); }
-    const std::vector<CodeGenError>&   getErrors()   const { return errors; }
-    const OptStats&                    getOptStats() const { return optStats; }
-    const std::vector<SymbolLogEntry>& getSymbolLog()const { return symbols.getLog(); }
-
-    const std::unordered_map<std::string, ClassInfo>& getClassInfos() const { return classInfos; }
-
-    // ── NEW (v4.0): exposes the LLVM Module to CFGAnalyzer ────
+    const std::vector<CodeGenError>&   getErrors()    const { return errors; }
+    const OptStats&                    getOptStats()  const { return optStats; }
+    const std::vector<SymbolLogEntry>& getSymbolLog() const { return symbols.getLog(); }
     llvm::Module* getModule() const { return module.get(); }
+
+    const std::unordered_map<std::string, ClassInfo>& getClassInfos() const {
+        return classInfos;
+    }
+
+    // Collect unused-variable warnings after generate()
+    std::vector<SymbolTable::UnusedWarning> collectUnusedWarnings() const {
+        return symbols.collectUnusedWarnings();
+    }
 
 private:
     llvm::LLVMContext              context;
@@ -94,9 +108,15 @@ private:
     std::string   currentClassName;
     llvm::Value*  currentThisAlloca;
 
-    // ── I/O runtime support ───────────────────────────────────
-    llvm::Function* printfFunc = nullptr;
-    llvm::Function* scanfFunc  = nullptr;
+    // ── I/O & runtime support ─────────────────────────────────
+    llvm::Function* printfFunc  = nullptr;
+    llvm::Function* scanfFunc   = nullptr;
+    llvm::Function* mallocFunc  = nullptr;
+    llvm::Function* freeFunc    = nullptr;
+    llvm::Function* strlenFunc  = nullptr;
+    llvm::Function* strcmpFunc  = nullptr;
+    llvm::Function* strcatFunc  = nullptr;
+    llvm::Function* strcpyFunc  = nullptr;
 
     // ── Helpers ───────────────────────────────────────────────
     void addError(const std::string& msg);
@@ -105,7 +125,8 @@ private:
     llvm::Type*  llvmType(ASTType   t);
     llvm::Type*  llvmType(ValueType t);
     llvm::Value* coerce(llvm::Value* val, llvm::Type* targetTy);
-    std::pair<llvm::Value*, llvm::Value*> promoteToCommon(llvm::Value* lhs, llvm::Value* rhs);
+    std::pair<llvm::Value*, llvm::Value*> promoteToCommon(llvm::Value* lhs,
+                                                           llvm::Value* rhs);
 
     // ── OOP helpers ───────────────────────────────────────────
     void generateMethod(FunctionAST* f,
@@ -121,9 +142,15 @@ private:
                                   int               fieldIdx,
                                   const std::string& tag = "");
 
-    // ── I/O helpers ───────────────────────────────────────────
+    // ── I/O & runtime helpers ─────────────────────────────────
     llvm::Function* getOrDeclarePrintf();
     llvm::Function* getOrDeclareScanf();
+    llvm::Function* getOrDeclareMalloc();
+    llvm::Function* getOrDeclareFree();
+    llvm::Function* getOrDeclareStrlen();
+    llvm::Function* getOrDeclareStrcmp();
+    llvm::Function* getOrDeclareStrcat();
+    llvm::Function* getOrDeclareStrcpy();
     llvm::Value*    buildFmtPtr(const std::string& fmt);
 
     std::unordered_map<std::string, llvm::GlobalVariable*> fmtCache;

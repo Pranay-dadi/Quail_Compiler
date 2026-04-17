@@ -16,6 +16,7 @@ set(CMAKE_DEPENDS_DEPENDENCY_FILES
   "/home/pranaydadi/Documents/Quail_Compiler/src/main.cpp" "CMakeFiles/Quail_Compiler.dir/src/main.cpp.o" "gcc" "CMakeFiles/Quail_Compiler.dir/src/main.cpp.o.d"
   "/home/pranaydadi/Documents/Quail_Compiler/src/parser/Parser.cpp" "CMakeFiles/Quail_Compiler.dir/src/parser/Parser.cpp.o" "gcc" "CMakeFiles/Quail_Compiler.dir/src/parser/Parser.cpp.o.d"
   "/home/pranaydadi/Documents/Quail_Compiler/src/semantic/SymbolTable.cpp" "CMakeFiles/Quail_Compiler.dir/src/semantic/SymbolTable.cpp.o" "gcc" "CMakeFiles/Quail_Compiler.dir/src/semantic/SymbolTable.cpp.o.d"
+  "/home/pranaydadi/Documents/Quail_Compiler/src/semantic/TypeChecker.cpp" "CMakeFiles/Quail_Compiler.dir/src/semantic/TypeChecker.cpp.o" "gcc" "CMakeFiles/Quail_Compiler.dir/src/semantic/TypeChecker.cpp.o.d"
   "/home/pranaydadi/Documents/Quail_Compiler/src/utils/Logger.cpp" "CMakeFiles/Quail_Compiler.dir/src/utils/Logger.cpp.o" "gcc" "CMakeFiles/Quail_Compiler.dir/src/utils/Logger.cpp.o.d"
   )
 

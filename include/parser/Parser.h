@@ -35,17 +35,16 @@ private:
     std::vector<std::unique_ptr<AST>> drainComments();
 
     // ── grammar ───────────────────────────────────────────────
-    std::unique_ptr<AST>         statement();
-    std::unique_ptr<AST>         expression();
-    std::unique_ptr<AST>         primary();
-    std::unique_ptr<BlockAST>    block();
-    std::unique_ptr<FunctionAST> function();
-    std::unique_ptr<ClassDeclAST> parseClass();   // NEW: class definition
-    std::unique_ptr<AST>         parseExpression(int minPrec = 0);
-    int                          getPrecedence(TokenType type);
-    bool                         isComment(TokenType t) const;
-    bool                         isTypeKeyword(TokenType t) const;
+    std::unique_ptr<AST>          statement();
+    std::unique_ptr<AST>          expression();
+    std::unique_ptr<AST>          primary();
+    std::unique_ptr<BlockAST>     block();
+    std::unique_ptr<FunctionAST>  function();
+    std::unique_ptr<ClassDeclAST> parseClass();
+    std::unique_ptr<AST>          parseExpression(int minPrec = 0);
+    int                           getPrecedence(TokenType type);
+    bool                          isComment(TokenType t) const;
+    bool                          isTypeKeyword(TokenType t) const;
 
-    // ── OOP argument list parser (shared by call / method call) ──
     std::vector<std::unique_ptr<AST>> parseArgList();
 };

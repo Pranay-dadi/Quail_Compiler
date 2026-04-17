@@ -125,10 +125,24 @@ CMakeFiles/Quail_Compiler.dir/src/semantic/SymbolTable.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Compiling CXX source to assembly CMakeFiles/Quail_Compiler.dir/src/semantic/SymbolTable.cpp.s"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/pranaydadi/Documents/Quail_Compiler/src/semantic/SymbolTable.cpp -o CMakeFiles/Quail_Compiler.dir/src/semantic/SymbolTable.cpp.s
 
+CMakeFiles/Quail_Compiler.dir/src/semantic/TypeChecker.cpp.o: CMakeFiles/Quail_Compiler.dir/flags.make
+CMakeFiles/Quail_Compiler.dir/src/semantic/TypeChecker.cpp.o: ../src/semantic/TypeChecker.cpp
+CMakeFiles/Quail_Compiler.dir/src/semantic/TypeChecker.cpp.o: CMakeFiles/Quail_Compiler.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/pranaydadi/Documents/Quail_Compiler/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_5) "Building CXX object CMakeFiles/Quail_Compiler.dir/src/semantic/TypeChecker.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/Quail_Compiler.dir/src/semantic/TypeChecker.cpp.o -MF CMakeFiles/Quail_Compiler.dir/src/semantic/TypeChecker.cpp.o.d -o CMakeFiles/Quail_Compiler.dir/src/semantic/TypeChecker.cpp.o -c /home/pranaydadi/Documents/Quail_Compiler/src/semantic/TypeChecker.cpp
+
+CMakeFiles/Quail_Compiler.dir/src/semantic/TypeChecker.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Preprocessing CXX source to CMakeFiles/Quail_Compiler.dir/src/semantic/TypeChecker.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /home/pranaydadi/Documents/Quail_Compiler/src/semantic/TypeChecker.cpp > CMakeFiles/Quail_Compiler.dir/src/semantic/TypeChecker.cpp.i
+
+CMakeFiles/Quail_Compiler.dir/src/semantic/TypeChecker.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Compiling CXX source to assembly CMakeFiles/Quail_Compiler.dir/src/semantic/TypeChecker.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/pranaydadi/Documents/Quail_Compiler/src/semantic/TypeChecker.cpp -o CMakeFiles/Quail_Compiler.dir/src/semantic/TypeChecker.cpp.s
+
 CMakeFiles/Quail_Compiler.dir/src/utils/Logger.cpp.o: CMakeFiles/Quail_Compiler.dir/flags.make
 CMakeFiles/Quail_Compiler.dir/src/utils/Logger.cpp.o: ../src/utils/Logger.cpp
 CMakeFiles/Quail_Compiler.dir/src/utils/Logger.cpp.o: CMakeFiles/Quail_Compiler.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/pranaydadi/Documents/Quail_Compiler/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_5) "Building CXX object CMakeFiles/Quail_Compiler.dir/src/utils/Logger.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/pranaydadi/Documents/Quail_Compiler/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_6) "Building CXX object CMakeFiles/Quail_Compiler.dir/src/utils/Logger.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/Quail_Compiler.dir/src/utils/Logger.cpp.o -MF CMakeFiles/Quail_Compiler.dir/src/utils/Logger.cpp.o.d -o CMakeFiles/Quail_Compiler.dir/src/utils/Logger.cpp.o -c /home/pranaydadi/Documents/Quail_Compiler/src/utils/Logger.cpp
 
 CMakeFiles/Quail_Compiler.dir/src/utils/Logger.cpp.i: cmake_force
@@ -142,7 +156,7 @@ CMakeFiles/Quail_Compiler.dir/src/utils/Logger.cpp.s: cmake_force
 CMakeFiles/Quail_Compiler.dir/src/codegen/CodeGen.cpp.o: CMakeFiles/Quail_Compiler.dir/flags.make
 CMakeFiles/Quail_Compiler.dir/src/codegen/CodeGen.cpp.o: ../src/codegen/CodeGen.cpp
 CMakeFiles/Quail_Compiler.dir/src/codegen/CodeGen.cpp.o: CMakeFiles/Quail_Compiler.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/pranaydadi/Documents/Quail_Compiler/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_6) "Building CXX object CMakeFiles/Quail_Compiler.dir/src/codegen/CodeGen.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/pranaydadi/Documents/Quail_Compiler/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_7) "Building CXX object CMakeFiles/Quail_Compiler.dir/src/codegen/CodeGen.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/Quail_Compiler.dir/src/codegen/CodeGen.cpp.o -MF CMakeFiles/Quail_Compiler.dir/src/codegen/CodeGen.cpp.o.d -o CMakeFiles/Quail_Compiler.dir/src/codegen/CodeGen.cpp.o -c /home/pranaydadi/Documents/Quail_Compiler/src/codegen/CodeGen.cpp
 
 CMakeFiles/Quail_Compiler.dir/src/codegen/CodeGen.cpp.i: cmake_force
@@ -156,7 +170,7 @@ CMakeFiles/Quail_Compiler.dir/src/codegen/CodeGen.cpp.s: cmake_force
 CMakeFiles/Quail_Compiler.dir/src/autocorrect/AutoCorrector.cpp.o: CMakeFiles/Quail_Compiler.dir/flags.make
 CMakeFiles/Quail_Compiler.dir/src/autocorrect/AutoCorrector.cpp.o: ../src/autocorrect/AutoCorrector.cpp
 CMakeFiles/Quail_Compiler.dir/src/autocorrect/AutoCorrector.cpp.o: CMakeFiles/Quail_Compiler.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/pranaydadi/Documents/Quail_Compiler/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_7) "Building CXX object CMakeFiles/Quail_Compiler.dir/src/autocorrect/AutoCorrector.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/pranaydadi/Documents/Quail_Compiler/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_8) "Building CXX object CMakeFiles/Quail_Compiler.dir/src/autocorrect/AutoCorrector.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/Quail_Compiler.dir/src/autocorrect/AutoCorrector.cpp.o -MF CMakeFiles/Quail_Compiler.dir/src/autocorrect/AutoCorrector.cpp.o.d -o CMakeFiles/Quail_Compiler.dir/src/autocorrect/AutoCorrector.cpp.o -c /home/pranaydadi/Documents/Quail_Compiler/src/autocorrect/AutoCorrector.cpp
 
 CMakeFiles/Quail_Compiler.dir/src/autocorrect/AutoCorrector.cpp.i: cmake_force
@@ -170,7 +184,7 @@ CMakeFiles/Quail_Compiler.dir/src/autocorrect/AutoCorrector.cpp.s: cmake_force
 CMakeFiles/Quail_Compiler.dir/src/analysis/CFGAnalyzer.cpp.o: CMakeFiles/Quail_Compiler.dir/flags.make
 CMakeFiles/Quail_Compiler.dir/src/analysis/CFGAnalyzer.cpp.o: ../src/analysis/CFGAnalyzer.cpp
 CMakeFiles/Quail_Compiler.dir/src/analysis/CFGAnalyzer.cpp.o: CMakeFiles/Quail_Compiler.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/pranaydadi/Documents/Quail_Compiler/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_8) "Building CXX object CMakeFiles/Quail_Compiler.dir/src/analysis/CFGAnalyzer.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/pranaydadi/Documents/Quail_Compiler/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_9) "Building CXX object CMakeFiles/Quail_Compiler.dir/src/analysis/CFGAnalyzer.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/Quail_Compiler.dir/src/analysis/CFGAnalyzer.cpp.o -MF CMakeFiles/Quail_Compiler.dir/src/analysis/CFGAnalyzer.cpp.o.d -o CMakeFiles/Quail_Compiler.dir/src/analysis/CFGAnalyzer.cpp.o -c /home/pranaydadi/Documents/Quail_Compiler/src/analysis/CFGAnalyzer.cpp
 
 CMakeFiles/Quail_Compiler.dir/src/analysis/CFGAnalyzer.cpp.i: cmake_force
@@ -184,7 +198,7 @@ CMakeFiles/Quail_Compiler.dir/src/analysis/CFGAnalyzer.cpp.s: cmake_force
 CMakeFiles/Quail_Compiler.dir/src/analysis/ASTGrapher.cpp.o: CMakeFiles/Quail_Compiler.dir/flags.make
 CMakeFiles/Quail_Compiler.dir/src/analysis/ASTGrapher.cpp.o: ../src/analysis/ASTGrapher.cpp
 CMakeFiles/Quail_Compiler.dir/src/analysis/ASTGrapher.cpp.o: CMakeFiles/Quail_Compiler.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/pranaydadi/Documents/Quail_Compiler/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_9) "Building CXX object CMakeFiles/Quail_Compiler.dir/src/analysis/ASTGrapher.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/pranaydadi/Documents/Quail_Compiler/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_10) "Building CXX object CMakeFiles/Quail_Compiler.dir/src/analysis/ASTGrapher.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/Quail_Compiler.dir/src/analysis/ASTGrapher.cpp.o -MF CMakeFiles/Quail_Compiler.dir/src/analysis/ASTGrapher.cpp.o.d -o CMakeFiles/Quail_Compiler.dir/src/analysis/ASTGrapher.cpp.o -c /home/pranaydadi/Documents/Quail_Compiler/src/analysis/ASTGrapher.cpp
 
 CMakeFiles/Quail_Compiler.dir/src/analysis/ASTGrapher.cpp.i: cmake_force
@@ -201,6 +215,7 @@ Quail_Compiler_OBJECTS = \
 "CMakeFiles/Quail_Compiler.dir/src/lexer/Lexer.cpp.o" \
 "CMakeFiles/Quail_Compiler.dir/src/parser/Parser.cpp.o" \
 "CMakeFiles/Quail_Compiler.dir/src/semantic/SymbolTable.cpp.o" \
+"CMakeFiles/Quail_Compiler.dir/src/semantic/TypeChecker.cpp.o" \
 "CMakeFiles/Quail_Compiler.dir/src/utils/Logger.cpp.o" \
 "CMakeFiles/Quail_Compiler.dir/src/codegen/CodeGen.cpp.o" \
 "CMakeFiles/Quail_Compiler.dir/src/autocorrect/AutoCorrector.cpp.o" \
@@ -214,6 +229,7 @@ Quail_Compiler: CMakeFiles/Quail_Compiler.dir/src/main.cpp.o
 Quail_Compiler: CMakeFiles/Quail_Compiler.dir/src/lexer/Lexer.cpp.o
 Quail_Compiler: CMakeFiles/Quail_Compiler.dir/src/parser/Parser.cpp.o
 Quail_Compiler: CMakeFiles/Quail_Compiler.dir/src/semantic/SymbolTable.cpp.o
+Quail_Compiler: CMakeFiles/Quail_Compiler.dir/src/semantic/TypeChecker.cpp.o
 Quail_Compiler: CMakeFiles/Quail_Compiler.dir/src/utils/Logger.cpp.o
 Quail_Compiler: CMakeFiles/Quail_Compiler.dir/src/codegen/CodeGen.cpp.o
 Quail_Compiler: CMakeFiles/Quail_Compiler.dir/src/autocorrect/AutoCorrector.cpp.o
@@ -234,6 +250,8 @@ Quail_Compiler: /usr/lib/llvm-14/lib/libLLVMObjCARCOpts.a
 Quail_Compiler: /usr/lib/llvm-14/lib/libLLVMTarget.a
 Quail_Compiler: /usr/lib/llvm-14/lib/libLLVMX86CodeGen.a
 Quail_Compiler: /usr/lib/llvm-14/lib/libLLVMX86AsmParser.a
+Quail_Compiler: /usr/lib/llvm-14/lib/libLLVMAArch64CodeGen.a
+Quail_Compiler: /usr/lib/llvm-14/lib/libLLVMAArch64AsmParser.a
 Quail_Compiler: /usr/lib/llvm-14/lib/libLLVMCoroutines.a
 Quail_Compiler: /usr/lib/llvm-14/lib/libLLVMipo.a
 Quail_Compiler: /usr/lib/llvm-14/lib/libLLVMIRReader.a
@@ -242,6 +260,9 @@ Quail_Compiler: /usr/lib/llvm-14/lib/libLLVMVectorize.a
 Quail_Compiler: /usr/lib/llvm-14/lib/libLLVMFrontendOpenMP.a
 Quail_Compiler: /usr/lib/llvm-14/lib/libLLVMLinker.a
 Quail_Compiler: /usr/lib/llvm-14/lib/libLLVMInstrumentation.a
+Quail_Compiler: /usr/lib/llvm-14/lib/libLLVMX86Desc.a
+Quail_Compiler: /usr/lib/llvm-14/lib/libLLVMMCDisassembler.a
+Quail_Compiler: /usr/lib/llvm-14/lib/libLLVMX86Info.a
 Quail_Compiler: /usr/lib/llvm-14/lib/libLLVMAsmPrinter.a
 Quail_Compiler: /usr/lib/llvm-14/lib/libLLVMDebugInfoMSF.a
 Quail_Compiler: /usr/lib/llvm-14/lib/libLLVMGlobalISel.a
@@ -263,19 +284,19 @@ Quail_Compiler: /usr/lib/llvm-14/lib/libLLVMCFGuard.a
 Quail_Compiler: /usr/lib/llvm-14/lib/libLLVMCore.a
 Quail_Compiler: /usr/lib/llvm-14/lib/libLLVMRemarks.a
 Quail_Compiler: /usr/lib/llvm-14/lib/libLLVMBitstreamReader.a
-Quail_Compiler: /usr/lib/llvm-14/lib/libLLVMX86Desc.a
-Quail_Compiler: /usr/lib/llvm-14/lib/libLLVMMCDisassembler.a
-Quail_Compiler: /usr/lib/llvm-14/lib/libLLVMX86Info.a
 Quail_Compiler: /usr/lib/llvm-14/lib/libLLVMMCParser.a
+Quail_Compiler: /usr/lib/llvm-14/lib/libLLVMAArch64Desc.a
+Quail_Compiler: /usr/lib/llvm-14/lib/libLLVMAArch64Info.a
 Quail_Compiler: /usr/lib/llvm-14/lib/libLLVMMC.a
 Quail_Compiler: /usr/lib/llvm-14/lib/libLLVMBinaryFormat.a
 Quail_Compiler: /usr/lib/llvm-14/lib/libLLVMDebugInfoCodeView.a
+Quail_Compiler: /usr/lib/llvm-14/lib/libLLVMAArch64Utils.a
 Quail_Compiler: /usr/lib/llvm-14/lib/libLLVMSupport.a
 Quail_Compiler: /usr/lib/x86_64-linux-gnu/libz.so
 Quail_Compiler: /usr/lib/x86_64-linux-gnu/libtinfo.so
 Quail_Compiler: /usr/lib/llvm-14/lib/libLLVMDemangle.a
 Quail_Compiler: CMakeFiles/Quail_Compiler.dir/link.txt
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --bold --progress-dir=/home/pranaydadi/Documents/Quail_Compiler/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_10) "Linking CXX executable Quail_Compiler"
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --bold --progress-dir=/home/pranaydadi/Documents/Quail_Compiler/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_11) "Linking CXX executable Quail_Compiler"
 	$(CMAKE_COMMAND) -E cmake_link_script CMakeFiles/Quail_Compiler.dir/link.txt --verbose=$(VERBOSE)
 	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --blue --bold "Copying test .mc files to build/test/"
 	/usr/bin/cmake -E copy_directory /home/pranaydadi/Documents/Quail_Compiler/test /home/pranaydadi/Documents/Quail_Compiler/build/test

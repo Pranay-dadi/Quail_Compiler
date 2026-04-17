@@ -32,7 +32,8 @@ void SymbolTable::insert(const std::string& name,
                          SymbolKind         kind,
                          llvm::Value*       value,
                          int                arraySize,
-                         const std::string& objectClass)
+                         const std::string& objectClass,
+                         int                line)
 {
     if (scopes.empty())
         throw std::runtime_error("[SymbolTable] No active scope");
@@ -50,6 +51,7 @@ void SymbolTable::insert(const std::string& name,
     sym.definedAtDepth = currentDepth();
     sym.ownerFunction  = currentFunction;
     sym.objectClass    = objectClass;
+    sym.line           = line;
     top[name] = sym;
 
     appendLog(sym);
@@ -118,6 +120,28 @@ void SymbolTable::updateValue(const std::string& name, llvm::Value* value) {
     if (s) s->value = value;
 }
 
+void SymbolTable::markRead(const std::string& name) {
+    Symbol* s = lookup(name);
+    if (s) s->readCount++;
+}
+
+std::vector<SymbolTable::UnusedWarning> SymbolTable::collectUnusedWarnings() const {
+    std::vector<UnusedWarning> warnings;
+    for (auto& scope : scopes) {
+        for (auto& [name, sym] : scope) {
+            if (sym.kind == SymbolKind::Function) continue;
+            if (sym.kind == SymbolKind::Object)   continue;
+            // Skip loop variables and single-underscore names
+            if (name == "_") continue;
+            if (sym.readCount == 0) {
+                warnings.push_back({sym.name, sym.kind,
+                                    sym.ownerFunction, sym.line});
+            }
+        }
+    }
+    return warnings;
+}
+
 std::string SymbolTable::typeName(ValueType t) {
     switch (t) {
         case ValueType::Int:     return "int";
@@ -135,6 +159,8 @@ std::string SymbolTable::kindName(SymbolKind k) {
         case SymbolKind::Function:  return "function";
         case SymbolKind::Parameter: return "parameter";
         case SymbolKind::Object:    return "object";
+        case SymbolKind::Const:     return "const";
+        case SymbolKind::Pointer:   return "pointer";
     }
     return "?";
 }

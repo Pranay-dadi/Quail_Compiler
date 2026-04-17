@@ -12,7 +12,9 @@ enum class SymbolKind {
     Array,
     Function,
     Parameter,
-    Object       // class instance (stack-allocated struct)
+    Object,      // class instance (stack-allocated struct)
+    Const,       // read-only variable
+    Pointer      // pointer variable (stores an address)
 };
 
 // ── Value types ───────────────────────────────────────────────
@@ -36,6 +38,10 @@ struct Symbol {
 
     std::vector<ValueType> paramTypes;
     ValueType              returnType = ValueType::Int;
+
+    // ── Usage tracking ────────────────────────────────────────
+    mutable int  readCount = 0;  // incremented on each load
+    int          line      = 0;  // declaration line number
 };
 
 // ── Flat log entry ────────────────────────────────────────────
@@ -46,7 +52,7 @@ struct SymbolLogEntry {
     int          arraySize      = 0;
     int          scopeDepth     = 0;
     std::string  ownerFunction;
-    std::string  objectClass;    // for kind==Object
+    std::string  objectClass;
 
     std::vector<ValueType> paramTypes;
     ValueType              returnType = ValueType::Int;
@@ -72,7 +78,8 @@ public:
                 SymbolKind         kind,
                 llvm::Value*       value,
                 int                arraySize   = 0,
-                const std::string& objectClass = "");
+                const std::string& objectClass = "",
+                int                line        = 0);
 
     void insertFunction(const std::string&            name,
                         ValueType                     returnType,
@@ -93,6 +100,17 @@ public:
     }
     void updateValue(const std::string& name, llvm::Value* value);
 
+    // ── Usage tracking ────────────────────────────────────────
+    void markRead(const std::string& name);
+
+    struct UnusedWarning {
+        std::string name;
+        SymbolKind  kind;
+        std::string ownerFunction;
+        int         line;
+    };
+    std::vector<UnusedWarning> collectUnusedWarnings() const;
+
     static std::string typeName(ValueType t);
     static std::string kindName(SymbolKind k);
 
@@ -100,9 +118,9 @@ public:
 
 private:
     using Scope = std::unordered_map<std::string, Symbol>;
-    std::vector<Scope>         scopes;
+    std::vector<Scope>          scopes;
     std::vector<SymbolLogEntry> log;
-    std::string                currentFunction;
+    std::string                 currentFunction;
 
     void appendLog(const Symbol& sym);
 };

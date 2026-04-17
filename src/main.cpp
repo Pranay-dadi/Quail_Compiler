@@ -1,17 +1,17 @@
 // ============================================================
-//  Quail Compiler  v4.0  — Analysis Edition
+//  Quail Compiler  v5.0  — Full Feature Edition
 //
-//  New in v4.0:
-//    • --cfg           Per-function CFG DOT files
-//    • --cfg-all       All functions in one clustered DOT
-//    • --call-graph    Call graph DOT file
-//    • --ast-graph     AST visualisation DOT file
-//    • --ast-stats     AST node statistics breakdown
-//    • --complexity    Cyclomatic-complexity report
-//    • --dead-code     Unreachable basic-block detection
-//    • --graph         Enable all graph outputs at once
-//    • --render        Auto-render DOTs to PNG via graphviz
-//    • --summary       Compact compilation summary table
+//  New in v5.0:
+//    • const keyword with write-protection
+//    • switch/case/default statements
+//    • Unused variable warnings
+//    • Dedicated TypeChecker pass (pre-codegen)
+//    • Pointer types (&, *, ->)
+//    • Heap allocation (new / delete)
+//    • string type + strlen/strcmp/strcat
+//    • ARM / AArch64 cross-compilation (--arm)
+//    • Single-level inheritance (extends / super)
+//    • Smarter AutoCorrector with typo suggestions
 //
 //  Usage:
 //    ./Quail_Compiler [FLAGS]  <file.mc>
@@ -32,6 +32,7 @@
 
 #include "lexer/Lexer.h"
 #include "parser/Parser.h"
+#include "semantic/TypeChecker.h"
 #include "codegen/CodeGen.h"
 #include "autocorrect/AutoCorrector.h"
 #include "analysis/CFGAnalyzer.h"
@@ -50,41 +51,49 @@ static const char* BOLD    = "\033[1m";
 static const char* DIM     = "\033[2m";
 static const char* RESET   = "\033[0m";
 
-// ── Forward declarations ──────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+//  Forward declarations
+// ─────────────────────────────────────────────────────────────
 static std::string tokStr(TokenType t);
 static void printTokenTable(const std::vector<Token>& tokens);
 static void printCommentSummary(const std::vector<Token>& tokens);
 static void printClassRegistry(const std::unordered_map<std::string,ClassInfo>&);
 static void printSymbolTable(const std::vector<SymbolLogEntry>&);
-static void printOptReport(const OptStats&, OptLevel, const std::string&, const std::string&, bool);
-static bool reportErrors(const std::string&, const std::vector<LexError>&,
-                         const std::vector<ParseError>&, const std::vector<CodeGenError>&);
+static void printOptReport(const OptStats&, OptLevel,
+                           const std::string&, const std::string&, bool);
+static bool reportErrors(const std::string&,
+                         const std::vector<LexError>&,
+                         const std::vector<ParseError>&,
+                         const std::vector<CodeGenError>&);
 
-// ── BUG FIX: forward-declare these so compileSinglePass can see them ──
 struct CompileOptions;
 struct CompileResult;
 static void printGeneratedFiles(const CompileResult& r, const std::string& stem);
-static void runGraphAnalysis(CodeGen& cg, AST* ast, const std::string& outDir,
-                             const std::string& stem, const CompileOptions& opts,
+static void runGraphAnalysis(CodeGen& cg, AST* ast,
+                             const std::string& outDir,
+                             const std::string& stem,
+                             const CompileOptions& opts,
                              CompileResult& res, bool verbose);
 
 // ─────────────────────────────────────────────────────────────
-//  Compilation options (bundled for clean passing)
+//  Compilation options
 // ─────────────────────────────────────────────────────────────
 struct CompileOptions {
     bool debugMode      = false;
     bool buildBin       = false;
     bool autoCorrect    = true;
     bool showIrDiff     = false;
-    bool genCFG         = false;   // per-function CFG DOT
-    bool genCFGAll      = false;   // all-in-one CFG DOT
-    bool genCallGraph   = false;   // call graph DOT
-    bool genASTGraph    = false;   // AST DOT
+    bool genCFG         = false;
+    bool genCFGAll      = false;
+    bool genCallGraph   = false;
+    bool genASTGraph    = false;
     bool showASTStats   = false;
     bool showComplexity = false;
     bool showDeadCode   = false;
-    bool renderGraphs   = false;   // call graphviz `dot`
+    bool renderGraphs   = false;
     bool showSummary    = true;
+    bool buildArm       = false;   // true = AArch64 target
+    bool noWarn         = false;   // suppress unused-variable warnings
     OptLevel optLevel   = OptLevel::O2;
 };
 
@@ -97,13 +106,13 @@ struct CompileResult {
     bool        linkOk       = false;
     int         exitCode     = -1;
     int         errorCount   = 0;
+    int         warnCount    = 0;
     std::string llPath;
     std::string binPath;
     int         commentCount = 0;
     int         classCount   = 0;
     int         lineCount    = 0;
     int         tokenCount   = 0;
-    // Generated graph files
     std::vector<std::string> dotFiles;
     std::vector<std::string> pngFiles;
 };
@@ -116,6 +125,7 @@ static std::string tokStr(TokenType t) {
         case TokenType::INT:           return "INT";
         case TokenType::FLOAT:         return "FLOAT";
         case TokenType::VOID:          return "VOID";
+        case TokenType::CONST:         return "CONST";
         case TokenType::RETURN:        return "RETURN";
         case TokenType::IF:            return "IF";
         case TokenType::ELSE:          return "ELSE";
@@ -123,18 +133,26 @@ static std::string tokStr(TokenType t) {
         case TokenType::FOR:           return "FOR";
         case TokenType::BREAK:         return "BREAK";
         case TokenType::CONTINUE:      return "CONTINUE";
+        case TokenType::SWITCH:        return "SWITCH";
+        case TokenType::CASE:          return "CASE";
+        case TokenType::DEFAULT:       return "DEFAULT";
         case TokenType::CLASS:         return "CLASS";
         case TokenType::NEW:           return "NEW";
+        case TokenType::DELETE:        return "DELETE";
         case TokenType::THIS:          return "THIS";
         case TokenType::PUBLIC:        return "PUBLIC";
         case TokenType::PRIVATE:       return "PRIVATE";
+        case TokenType::EXTENDS:       return "EXTENDS";
+        case TokenType::SUPER:         return "SUPER";
+        case TokenType::OVERRIDE:      return "OVERRIDE";
+        case TokenType::STRING_TYPE:   return "STRING";
         case TokenType::PRINT:         return "PRINT";
         case TokenType::PRINTLN:       return "PRINTLN";
         case TokenType::SCAN:          return "SCAN";
         case TokenType::IDENT:         return "IDENT";
         case TokenType::NUMBER:        return "NUMBER";
         case TokenType::FLOAT_VAL:     return "FLOAT_VAL";
-        case TokenType::STRING_LIT:    return "STRING";
+        case TokenType::STRING_LIT:    return "STRING_LIT";
         case TokenType::PLUS:          return "PLUS";
         case TokenType::MINUS:         return "MINUS";
         case TokenType::MUL:           return "MUL";
@@ -150,6 +168,8 @@ static std::string tokStr(TokenType t) {
         case TokenType::AND:           return "AND";
         case TokenType::OR:            return "OR";
         case TokenType::NOT:           return "NOT";
+        case TokenType::AMPERSAND:     return "ADDR_OF";
+        case TokenType::ARROW:         return "ARROW";
         case TokenType::DOT:           return "DOT";
         case TokenType::LPAREN:        return "LPAREN";
         case TokenType::RPAREN:        return "RPAREN";
@@ -159,6 +179,7 @@ static std::string tokStr(TokenType t) {
         case TokenType::RBRACKET:      return "RBRACKET";
         case TokenType::SEMI:          return "SEMI";
         case TokenType::COMMA:         return "COMMA";
+        case TokenType::COLON:         return "COLON";
         case TokenType::LINE_COMMENT:  return "LINE_CMT";
         case TokenType::BLOCK_COMMENT: return "BLOCK_CMT";
         case TokenType::EOF_TOK:       return "EOF";
@@ -179,38 +200,51 @@ static void printTokenTable(const std::vector<Token>& tokens) {
               << " | CATEGORY\n" << sep << "\n";
     for (const auto& tk : tokens) {
         std::string cat;
-        if (tk.type == TokenType::CLASS  || tk.type == TokenType::NEW   ||
-            tk.type == TokenType::THIS   || tk.type == TokenType::PUBLIC ||
-            tk.type == TokenType::PRIVATE)
-            cat = std::string(MAGENTA) + "OOP_KW"  + RESET;
+        if (tk.type == TokenType::CLASS    || tk.type == TokenType::NEW    ||
+            tk.type == TokenType::DELETE   || tk.type == TokenType::THIS   ||
+            tk.type == TokenType::PUBLIC   || tk.type == TokenType::PRIVATE ||
+            tk.type == TokenType::EXTENDS  || tk.type == TokenType::SUPER  ||
+            tk.type == TokenType::OVERRIDE)
+            cat = std::string(MAGENTA) + "OOP_KW" + RESET;
         else if (tk.type == TokenType::PRINT   ||
                  tk.type == TokenType::PRINTLN  ||
                  tk.type == TokenType::SCAN)
-            cat = std::string(CYAN)    + "IO_KW"   + RESET;
+            cat = std::string(CYAN) + "IO_KW" + RESET;
+        else if (tk.type == TokenType::SWITCH  ||
+                 tk.type == TokenType::CASE    ||
+                 tk.type == TokenType::DEFAULT)
+            cat = std::string(YELLOW) + "SWITCH_KW" + RESET;
+        else if (tk.type == TokenType::CONST   ||
+                 tk.type == TokenType::STRING_TYPE)
+            cat = std::string(CYAN) + "TYPE_KW" + RESET;
+        else if (tk.type == TokenType::AMPERSAND ||
+                 tk.type == TokenType::ARROW)
+            cat = std::string(GREEN) + "PTR_OP" + RESET;
         else if (tk.type == TokenType::VOID || tk.type == TokenType::INT  ||
-                 tk.type == TokenType::FLOAT || tk.type == TokenType::RETURN ||
+                 tk.type == TokenType::FLOAT|| tk.type == TokenType::RETURN||
                  tk.type == TokenType::IF   || tk.type == TokenType::ELSE  ||
                  tk.type == TokenType::WHILE|| tk.type == TokenType::FOR   ||
                  tk.type == TokenType::BREAK|| tk.type == TokenType::CONTINUE)
-            cat = std::string(GREEN)   + "KEYWORD" + RESET;
+            cat = std::string(GREEN) + "KEYWORD" + RESET;
         else if (tk.type == TokenType::IDENT)
-            cat = std::string(CYAN)    + "IDENT"   + RESET;
+            cat = std::string(CYAN) + "IDENT" + RESET;
         else if (tk.type == TokenType::NUMBER    ||
                  tk.type == TokenType::FLOAT_VAL ||
                  tk.type == TokenType::STRING_LIT)
-            cat = std::string(YELLOW)  + "LITERAL" + RESET;
-        else if (tk.type == TokenType::LINE_COMMENT || tk.type == TokenType::BLOCK_COMMENT)
-            cat = std::string(DIM)     + "COMMENT" + RESET;
+            cat = std::string(YELLOW) + "LITERAL" + RESET;
+        else if (tk.type == TokenType::LINE_COMMENT ||
+                 tk.type == TokenType::BLOCK_COMMENT)
+            cat = std::string(DIM) + "COMMENT" + RESET;
         else if (tk.type == TokenType::DOT)
-            cat = std::string(CYAN)    + "MEMBER"  + RESET;
+            cat = std::string(CYAN) + "MEMBER" + RESET;
         else
-            cat = std::string(RED)     + "OP/PUNCT"+ RESET;
+            cat = std::string(RED) + "OP/PUNCT" + RESET;
 
         std::string lex = tk.lexeme;
         if (lex.size() > (size_t)(W1 - 2)) lex = lex.substr(0, W1 - 5) + "...";
         std::cout << "| " << std::left << std::setw(W1) << lex
                   << " | " << std::setw(W2) << tokStr(tk.type)
-                  << " | " << std::setw(4)  << tk.line
+                  << " | " << std::setw(4) << tk.line
                   << " | " << cat << "\n";
         if (tk.type == TokenType::EOF_TOK) break;
     }
@@ -228,7 +262,8 @@ static void printCommentSummary(const std::vector<Token>& tokens) {
         } else if (tk.type == TokenType::BLOCK_COMMENT) {
             std::cout << DIM << "  line " << std::setw(4) << tk.line
                       << "  /* " << tk.lexeme.substr(0, 60)
-                      << (tk.lexeme.size() > 60 ? "..." : "") << " */" << RESET << "\n";
+                      << (tk.lexeme.size() > 60 ? "..." : "")
+                      << " */" << RESET << "\n";
             ++blockCount;
         }
     }
@@ -249,10 +284,13 @@ static void printClassRegistry(
               << "╚══════════════════════════════════════════════════════════╝\n"
               << RESET;
     for (auto& [name, info] : infos) {
-        std::cout << "\n  " << BOLD << CYAN << "class " << name << RESET << " {\n";
-        if (info.fields.empty())
+        std::cout << "\n  " << BOLD << CYAN << "class " << name;
+        if (info.hasParent())
+            std::cout << " extends " << info.parentName;
+        std::cout << RESET << " {\n";
+        if (info.allFields.empty())
             std::cout << DIM << "    (no fields)\n" << RESET;
-        for (auto& [fn, ft] : info.fields)
+        for (auto& [fn, ft] : info.allFields)
             std::cout << "    " << YELLOW << SymbolTable::typeName(ft)
                       << RESET << "  " << fn << ";\n";
         std::cout << "  }\n";
@@ -278,7 +316,8 @@ static void printSymbolTable(const std::vector<SymbolLogEntry>& log) {
         std::cout << DIM << "    (none)\n" << RESET;
     } else {
         for (const auto* e : functions) {
-            std::string sig = SymbolTable::typeName(e->returnType) + " " + e->name + "(";
+            std::string sig = SymbolTable::typeName(e->returnType)
+                            + " " + e->name + "(";
             for (size_t i = 0; i < e->paramTypes.size(); ++i) {
                 if (i) sig += ", ";
                 sig += SymbolTable::typeName(e->paramTypes[i]);
@@ -294,7 +333,7 @@ static void printSymbolTable(const std::vector<SymbolLogEntry>& log) {
 
     std::cout << "\n" << BOLD << CYAN
               << "  ┌─────────────────────────────────────────────────────────┐\n"
-              << "  │         VARIABLES, PARAMETERS & OBJECTS                 │\n"
+              << "  │    VARIABLES, PARAMETERS, OBJECTS, POINTERS & CONSTS   │\n"
               << "  └─────────────────────────────────────────────────────────┘\n"
               << RESET;
     if (locals.empty()) {
@@ -305,19 +344,26 @@ static void printSymbolTable(const std::vector<SymbolLogEntry>& log) {
             if (e->ownerFunction != lastOwner) {
                 lastOwner = e->ownerFunction;
                 std::string owner = lastOwner.empty() ? "<global>" : lastOwner;
-                std::cout << "\n  " << YELLOW << BOLD << "  in " << owner << "():\n" << RESET;
+                std::cout << "\n  " << YELLOW << BOLD
+                          << "  in " << owner << "():\n" << RESET;
             }
             const char* kc =
                 e->kind == SymbolKind::Parameter ? CYAN    :
                 e->kind == SymbolKind::Array     ? MAGENTA :
-                e->kind == SymbolKind::Object    ? YELLOW  : BLUE;
+                e->kind == SymbolKind::Object    ? YELLOW  :
+                e->kind == SymbolKind::Const     ? GREEN   :
+                e->kind == SymbolKind::Pointer   ? CYAN    : BLUE;
             const char* kt =
                 e->kind == SymbolKind::Parameter ? "param" :
                 e->kind == SymbolKind::Array     ? "array" :
-                e->kind == SymbolKind::Object    ? "obj  " : "var  ";
+                e->kind == SymbolKind::Object    ? "obj  " :
+                e->kind == SymbolKind::Const     ? "const" :
+                e->kind == SymbolKind::Pointer   ? "ptr  " : "var  ";
             std::string ts;
             if (e->kind == SymbolKind::Object)
                 ts = e->objectClass + " (obj)";
+            else if (e->kind == SymbolKind::Pointer)
+                ts = SymbolTable::typeName(e->type) + "* (ptr)";
             else {
                 ts = SymbolTable::typeName(e->type);
                 if (e->kind == SymbolKind::Array)
@@ -350,55 +396,75 @@ static void printOptReport(const OptStats& s, OptLevel level,
     const int W = 28, N = 8;
     std::cout << BOLD
               << std::left << std::setw(W) << "Function"
-              << std::setw(N) << "Instr↓" << std::setw(N) << "Before" << std::setw(N) << "After"
-              << std::setw(N) << "Blks↓"  << std::setw(N) << "Before" << std::setw(N) << "After"
+              << std::setw(N) << "Instr↓"
+              << std::setw(N) << "Before"
+              << std::setw(N) << "After"
+              << std::setw(N) << "Blks↓"
+              << std::setw(N) << "Before"
+              << std::setw(N) << "After"
               << "\n" << RESET << std::string(W + N * 6, '-') << "\n";
 
     for (const auto& fs : s.functions) {
         int id = (int)fs.instrBefore - (int)fs.instrAfter;
         int bd = (int)fs.blocksBefore - (int)fs.blocksAfter;
-        auto col = [](int d) -> const char* { return d > 0 ? GREEN : (d < 0 ? RED : RESET); };
+        auto col = [](int d) -> const char* {
+            return d > 0 ? GREEN : (d < 0 ? RED : RESET);
+        };
         std::cout << std::left << std::setw(W) << fs.name
                   << col(id) << std::setw(N) << id << RESET
-                  << std::setw(N) << fs.instrBefore  << std::setw(N) << fs.instrAfter
+                  << std::setw(N) << fs.instrBefore
+                  << std::setw(N) << fs.instrAfter
                   << col(bd) << std::setw(N) << bd << RESET
-                  << std::setw(N) << fs.blocksBefore << std::setw(N) << fs.blocksAfter << "\n";
+                  << std::setw(N) << fs.blocksBefore
+                  << std::setw(N) << fs.blocksAfter << "\n";
     }
 
     std::cout << std::string(W + N * 6, '-') << "\n";
     int tid = (int)s.totalInstrBefore  - (int)s.totalInstrAfter;
     int tbd = (int)s.totalBlocksBefore - (int)s.totalBlocksAfter;
-    auto col = [](int d) -> const char* { return d > 0 ? GREEN : (d < 0 ? RED : RESET); };
+    auto col = [](int d) -> const char* {
+        return d > 0 ? GREEN : (d < 0 ? RED : RESET);
+    };
     std::cout << BOLD << std::left << std::setw(W) << "TOTAL"
               << col(tid) << std::setw(N) << tid << RESET << BOLD
-              << std::setw(N) << s.totalInstrBefore  << std::setw(N) << s.totalInstrAfter
+              << std::setw(N) << s.totalInstrBefore
+              << std::setw(N) << s.totalInstrAfter
               << col(tbd) << std::setw(N) << tbd << RESET << BOLD
-              << std::setw(N) << s.totalBlocksBefore << std::setw(N) << s.totalBlocksAfter
+              << std::setw(N) << s.totalBlocksBefore
+              << std::setw(N) << s.totalBlocksAfter
               << "\n" << RESET;
 
     if (s.totalInstrBefore > 0)
-        std::cout << "\n  " << BOLD << (s.instrReduction() > 0 ? GREEN : RESET)
+        std::cout << "\n  " << BOLD
+                  << (s.instrReduction() > 0 ? GREEN : RESET)
                   << "Instruction reduction: " << s.instrReduction() << "%"
                   << RESET << "\n";
 
     if (showDiff && !irBefore.empty() && !irAfter.empty()) {
         auto split = [](const std::string& src) {
-            std::vector<std::string> v; std::istringstream ss(src); std::string l;
-            while (std::getline(ss, l)) v.push_back(l); return v;
+            std::vector<std::string> v;
+            std::istringstream ss(src);
+            std::string l;
+            while (std::getline(ss, l)) v.push_back(l);
+            return v;
         };
         auto bL = split(irBefore), aL = split(irAfter);
         std::cout << "\n" << BOLD << "── IR diff (before → after) ──\n" << RESET
                   << DIM << "  Before: " << bL.size() << " lines\n"
                   << "  After : " << aL.size() << " lines\n"
-                  << "  Removed: " << (int)bL.size() - (int)aL.size() << " lines\n" << RESET;
-        std::cout << "\n" << YELLOW << BOLD << "  Optimized IR (first 40 lines):\n" << RESET;
+                  << "  Removed: "
+                  << (int)bL.size() - (int)aL.size() << " lines\n" << RESET;
+        std::cout << "\n" << YELLOW << BOLD
+                  << "  Optimized IR (first 40 lines):\n" << RESET;
         int shown = 0;
         for (const auto& l : aL) {
             if (shown++ >= 40) {
-                std::cout << DIM << "  ... (" << aL.size() - 40 << " more lines)\n" << RESET;
+                std::cout << DIM << "  ... ("
+                          << aL.size() - 40 << " more lines)\n" << RESET;
                 break;
             }
-            std::cout << DIM << std::setw(4) << shown << RESET << "  " << l << "\n";
+            std::cout << DIM << std::setw(4) << shown << RESET
+                      << "  " << l << "\n";
         }
     }
 }
@@ -416,20 +482,46 @@ static bool reportErrors(const std::string& filename,
               << "╚══════════════════════════════════════════════════════════╝\n"
               << RESET << "  File: " << filename << "\n\n";
     int count = 0;
-    for (auto& e : lexErrs)   { std::cerr << RED << "[LEX]  " << RESET << filename << ":" << e.line << "  " << e.message << "\n"; ++count; }
-    for (auto& e : parseErrs) { std::cerr << RED << "[PARSE]" << RESET << " " << filename << ":" << e.line << "  " << e.message << "\n"; ++count; }
-    for (auto& e : cgErrs)    { std::cerr << RED << "[CGEN] " << RESET << e.message << "\n"; ++count; }
-    std::cerr << "\n" << RED << BOLD << count << " error" << (count == 1 ? "" : "s")
-              << " found." << RESET << " Compilation failed.\n\n";
+    for (auto& e : lexErrs)
+        std::cerr << RED << "[LEX]  " << RESET
+                  << filename << ":" << e.line << "  " << e.message << "\n",
+        ++count;
+    for (auto& e : parseErrs)
+        std::cerr << RED << "[PARSE]" << RESET
+                  << " " << filename << ":" << e.line << "  " << e.message << "\n",
+        ++count;
+    for (auto& e : cgErrs)
+        std::cerr << RED << "[CGEN] " << RESET
+                  << e.message << "\n",
+        ++count;
+    std::cerr << "\n" << RED << BOLD << count << " error"
+              << (count == 1 ? "" : "s") << " found." << RESET
+              << " Compilation failed.\n\n";
     return true;
 }
 
-// ─────────────────────────────────────────────────────────────
-//  printGeneratedFiles()  — summary of all output artifacts
-// ─────────────────────────────────────────────────────────────
-static void printGeneratedFiles(const CompileResult& r, const std::string& /*stem*/) {
+static void printTypeErrors(const std::vector<TypeError>& errs,
+                             const std::string& filename)
+{
+    std::cerr << "\n" << RED << BOLD
+              << "╔══════════════════════════════════════════════════════════╗\n"
+              << "║                   TYPE ERRORS                           ║\n"
+              << "╚══════════════════════════════════════════════════════════╝\n"
+              << RESET << "  File: " << filename << "\n\n";
+    for (auto& e : errs)
+        std::cerr << RED << "[TYPE] " << RESET
+                  << (e.line > 0 ? filename + ":" + std::to_string(e.line) + "  " : "")
+                  << e.message << "\n";
+    std::cerr << "\n" << RED << BOLD
+              << errs.size() << " type error(s) found.\n" << RESET;
+}
+
+static void printGeneratedFiles(const CompileResult& r,
+                                const std::string& /*stem*/)
+{
     std::cout << "\n" << BOLD << CYAN
-              << "── Generated Files ──────────────────────────────────────\n" << RESET;
+              << "── Generated Files ──────────────────────────────────────\n"
+              << RESET;
     auto printFile = [&](const std::string& path, const std::string& kind) {
         if (!path.empty() && fs::exists(path)) {
             auto sz = fs::file_size(path);
@@ -440,23 +532,11 @@ static void printGeneratedFiles(const CompileResult& r, const std::string& /*ste
     };
     printFile(r.llPath,  "IR (.ll)");
     printFile(r.binPath, "binary");
-    for (auto& d : r.dotFiles)
-        printFile(d, "DOT");
-    for (auto& p : r.pngFiles)
-        printFile(p, "PNG");
+    for (auto& d : r.dotFiles)  printFile(d, "DOT");
+    for (auto& p : r.pngFiles)  printFile(p, "PNG");
     std::cout << "\n";
 }
 
-// ─────────────────────────────────────────────────────────────
-//  runGraphAnalysis  — CFG, call graph, AST graphing
-//
-//  BUG FIXES applied here:
-//   1. showASTStats is now handled independently of genASTGraph
-//      (was previously nested inside the genASTGraph block, causing
-//       stats to be silently skipped when genASTGraph=false)
-//   2. AST stats are no longer printed twice when both
-//      --ast-stats and --ast-graph are active
-// ─────────────────────────────────────────────────────────────
 static void runGraphAnalysis(CodeGen&           cg,
                               AST*               ast,
                               const std::string& outDir,
@@ -468,121 +548,114 @@ static void runGraphAnalysis(CodeGen&           cg,
     llvm::Module* mod = cg.getModule();
     if (!mod) {
         if (verbose)
-            std::cerr << RED << "  [Graph] LLVM module unavailable — skipping analysis.\n" << RESET;
+            std::cerr << RED
+                      << "  [Graph] LLVM module unavailable — skipping.\n"
+                      << RESET;
         return;
     }
 
     CFGAnalyzer cfgAnalyzer(mod);
     cfgAnalyzer.analyze();
 
-    // ── Complexity report ─────────────────────────────────────
     if (opts.showComplexity)
         cfgAnalyzer.printComplexityReport();
 
-    // ── Dead code report ──────────────────────────────────────
     if (opts.showDeadCode) {
         std::cout << "\n" << BOLD << CYAN
-                  << "── Dead-Code Analysis ────────────────────────────────────\n" << RESET;
+                  << "── Dead-Code Analysis ────────────────────────────────────\n"
+                  << RESET;
         cfgAnalyzer.printDeadCodeReport();
     }
 
-    // ── CFG summary (always when verbose + any CFG graph flag) ─
     if (verbose && (opts.genCFG || opts.genCFGAll))
         cfgAnalyzer.printCFGSummary();
 
-    // ── Per-function CFG DOT ──────────────────────────────────
     if (opts.genCFG) {
         for (auto& fn : cfgAnalyzer.getFunctions()) {
-            std::string dotPath = outDir + "/" + stem + "_cfg_" + fn.name + ".dot";
-            std::string content = cfgAnalyzer.generateFunctionDOT(fn, /*showInstr=*/true);
-            if (cfgAnalyzer.saveDOT(dotPath, content)) {
+            std::string dotPath = outDir + "/" + stem
+                                + "_cfg_" + fn.name + ".dot";
+            if (cfgAnalyzer.saveDOT(dotPath,
+                    cfgAnalyzer.generateFunctionDOT(fn, true))) {
                 res.dotFiles.push_back(dotPath);
                 if (verbose)
-                    std::cout << YELLOW << "  CFG DOT : " << dotPath << RESET << "\n";
+                    std::cout << YELLOW << "  CFG DOT : " << dotPath
+                              << RESET << "\n";
                 if (opts.renderGraphs) {
-                    std::string pngPath = outDir + "/" + stem + "_cfg_" + fn.name + ".png";
+                    std::string pngPath = outDir + "/" + stem
+                                        + "_cfg_" + fn.name + ".png";
                     if (CFGAnalyzer::render(dotPath, pngPath)) {
                         res.pngFiles.push_back(pngPath);
-                        if (verbose) std::cout << GREEN << "  CFG PNG : " << pngPath << RESET << "\n";
+                        if (verbose)
+                            std::cout << GREEN << "  CFG PNG : "
+                                      << pngPath << RESET << "\n";
                     } else if (verbose) {
-                        std::cout << DIM << "  (graphviz not found — install with: sudo apt install graphviz)\n" << RESET;
+                        std::cout << DIM
+                                  << "  (graphviz not found — sudo apt install graphviz)\n"
+                                  << RESET;
                     }
                 }
-            } else if (verbose) {
-                std::cerr << RED << "  Failed to write DOT: " << dotPath << RESET << "\n";
             }
         }
     }
 
-    // ── All-functions CFG DOT ─────────────────────────────────
     if (opts.genCFGAll) {
         std::string dotPath = outDir + "/" + stem + "_cfg_all.dot";
-        if (cfgAnalyzer.saveDOT(dotPath, cfgAnalyzer.generateAllFunctionsDOT())) {
+        if (cfgAnalyzer.saveDOT(dotPath,
+                cfgAnalyzer.generateAllFunctionsDOT())) {
             res.dotFiles.push_back(dotPath);
-            if (verbose) std::cout << YELLOW << "  CFG-all DOT: " << dotPath << RESET << "\n";
+            if (verbose)
+                std::cout << YELLOW << "  CFG-all DOT: "
+                          << dotPath << RESET << "\n";
             if (opts.renderGraphs) {
                 std::string pngPath = outDir + "/" + stem + "_cfg_all.png";
-                if (CFGAnalyzer::render(dotPath, pngPath)) {
+                if (CFGAnalyzer::render(dotPath, pngPath))
                     res.pngFiles.push_back(pngPath);
-                    if (verbose) std::cout << GREEN << "  CFG-all PNG: " << pngPath << RESET << "\n";
-                }
             }
-        } else if (verbose) {
-            std::cerr << RED << "  Failed to write DOT: " << dotPath << RESET << "\n";
         }
     }
 
-    // ── Call graph DOT ────────────────────────────────────────
     if (opts.genCallGraph) {
         std::string dotPath = outDir + "/" + stem + "_callgraph.dot";
-        if (cfgAnalyzer.saveDOT(dotPath, cfgAnalyzer.generateCallGraphDOT())) {
+        if (cfgAnalyzer.saveDOT(dotPath,
+                cfgAnalyzer.generateCallGraphDOT())) {
             res.dotFiles.push_back(dotPath);
-            if (verbose) std::cout << YELLOW << "  Call-graph DOT: " << dotPath << RESET << "\n";
+            if (verbose)
+                std::cout << YELLOW << "  Call-graph DOT: "
+                          << dotPath << RESET << "\n";
             if (opts.renderGraphs) {
                 std::string pngPath = outDir + "/" + stem + "_callgraph.png";
-                if (CFGAnalyzer::render(dotPath, pngPath)) {
+                if (CFGAnalyzer::render(dotPath, pngPath))
                     res.pngFiles.push_back(pngPath);
-                    if (verbose) std::cout << GREEN << "  Call-graph PNG: " << pngPath << RESET << "\n";
-                }
             }
-        } else if (verbose) {
-            std::cerr << RED << "  Failed to write DOT: " << dotPath << RESET << "\n";
         }
     }
 
-    // ── BUG FIX: AST stats are now independent of genASTGraph ─
-    //  Previously: stats were nested inside `if (opts.genASTGraph)`,
-    //  so `--ast-stats` alone never printed anything from this function.
-    //  Now: stats run whenever showASTStats is set, regardless of
-    //  whether the DOT file is also being generated.
     if (opts.showASTStats && ast) {
         ASTGrapher grapher;
         auto stats = grapher.computeStats(ast);
         grapher.printStats(stats);
     }
 
-    // ── AST DOT ───────────────────────────────────────────────
     if (opts.genASTGraph && ast) {
         ASTGrapher grapher;
         std::string dotPath = outDir + "/" + stem + "_ast.dot";
         if (grapher.saveDOT(ast, dotPath, "Quail AST — " + stem)) {
             res.dotFiles.push_back(dotPath);
-            if (verbose) std::cout << YELLOW << "  AST DOT: " << dotPath << RESET << "\n";
+            if (verbose)
+                std::cout << YELLOW << "  AST DOT: " << dotPath
+                          << RESET << "\n";
             if (opts.renderGraphs) {
                 std::string pngPath = outDir + "/" + stem + "_ast.png";
-                if (ASTGrapher::render(dotPath, pngPath)) {
+                if (ASTGrapher::render(dotPath, pngPath))
                     res.pngFiles.push_back(pngPath);
-                    if (verbose) std::cout << GREEN << "  AST PNG: " << pngPath << RESET << "\n";
-                } else if (verbose) {
-                    std::cout << DIM << "  (graphviz not found — install with: sudo apt install graphviz)\n" << RESET;
-                }
+                else if (verbose)
+                    std::cout << DIM
+                              << "  (graphviz not found — sudo apt install graphviz)\n"
+                              << RESET;
             }
-        } else if (verbose) {
-            std::cerr << RED << "  Failed to write AST DOT: " << dotPath << RESET << "\n";
         }
     }
 
-    // ── Summary of what was produced ─────────────────────────
     if (verbose) {
         int nDot = (int)res.dotFiles.size();
         int nPng = (int)res.pngFiles.size();
@@ -590,7 +663,7 @@ static void runGraphAnalysis(CodeGen&           cg,
             std::cout << "\n" << DIM << "  Analysis produced: "
                       << nDot << " DOT file(s)";
             if (nPng > 0) std::cout << ", " << nPng << " PNG file(s)";
-            if (nDot > 0 && nPng == 0 && opts.renderGraphs == false)
+            if (nDot > 0 && !opts.renderGraphs)
                 std::cout << "  (add --render to auto-generate PNGs)";
             std::cout << RESET << "\n";
         }
@@ -612,17 +685,17 @@ static CompileResult compileSinglePass(const std::string& displayPath,
     res.binPath = outDir + "/" + stem;
     std::string objPath = outDir + "/" + stem + ".o";
 
-    // Source line count
     res.lineCount = (int)std::count(source.begin(), source.end(), '\n') + 1;
 
     // ── LEXER ─────────────────────────────────────────────────
     Lexer lexer(source, true);
     auto tokens    = lexer.tokenize();
     auto lexErrors = lexer.getErrors();
-    res.tokenCount = (int)tokens.size() - 1; // exclude EOF
+    res.tokenCount = (int)tokens.size() - 1;
 
     for (const auto& t : tokens)
-        if (t.type == TokenType::LINE_COMMENT || t.type == TokenType::BLOCK_COMMENT)
+        if (t.type == TokenType::LINE_COMMENT ||
+            t.type == TokenType::BLOCK_COMMENT)
             ++res.commentCount;
 
     if (verbose && opts.debugMode) {
@@ -634,14 +707,17 @@ static CompileResult compileSinglePass(const std::string& displayPath,
         std::cout << "--- [TOKEN STREAM] ---\n";
         for (const auto& tk : tokens) {
             if (tk.type == TokenType::LINE_COMMENT)
-                std::cout << DIM << "[COMMENT]    line:" << std::setw(4) << tk.line
-                          << "  // " << tk.lexeme << RESET << "\n";
+                std::cout << DIM << "[COMMENT]    line:" << std::setw(4)
+                          << tk.line << "  // " << tk.lexeme << RESET << "\n";
             else if (tk.type == TokenType::BLOCK_COMMENT)
-                std::cout << DIM << "[COMMENT]    line:" << std::setw(4) << tk.line
-                          << "  /* " << tk.lexeme.substr(0, 40)
-                          << (tk.lexeme.size() > 40 ? "..." : "") << " */" << RESET << "\n";
+                std::cout << DIM << "[COMMENT]    line:" << std::setw(4)
+                          << tk.line << "  /* "
+                          << tk.lexeme.substr(0, 40)
+                          << (tk.lexeme.size() > 40 ? "..." : "")
+                          << " */" << RESET << "\n";
             else
-                std::cout << "[TOKEN] " << std::left << std::setw(12) << tokStr(tk.type)
+                std::cout << "[TOKEN] " << std::left << std::setw(12)
+                          << tokStr(tk.type)
                           << "  line:" << std::setw(4) << tk.line
                           << "  \"" << tk.lexeme << "\"\n";
             if (tk.type == TokenType::EOF_TOK) break;
@@ -669,7 +745,7 @@ static CompileResult compileSinglePass(const std::string& displayPath,
 
     if (verbose) {
         if (opts.debugMode) {
-            std::cout << BLUE << BOLD << "[AST — with OOP + I/O nodes]\n" << RESET;
+            std::cout << BLUE << BOLD << "[AST — with all features]\n" << RESET;
             ast->print(0);
         } else {
             std::cout << GREEN << "Frontend OK\n" << RESET;
@@ -679,11 +755,19 @@ static CompileResult compileSinglePass(const std::string& displayPath,
         }
     }
 
-    // NOTE: AST stats are now handled inside runGraphAnalysis so they
-    // are never printed twice. The old pre-codegen block was removed.
+    // ── TYPE CHECKER ──────────────────────────────────────────
+    TypeChecker typeChecker;
+    typeChecker.check(ast.get());
+    if (typeChecker.hasErrors()) {
+        if (verbose) printTypeErrors(typeChecker.getErrors(), displayPath);
+        res.errorCount = (int)typeChecker.getErrors().size();
+        return res;
+    }
 
     // ── CODEGEN ───────────────────────────────────────────────
     CodeGen cg;
+    if (opts.buildArm)
+        cg.setTargetTriple("aarch64-linux-gnu");
     cg.generate(ast.get());
     auto cgErrors = cg.getErrors();
 
@@ -694,6 +778,33 @@ static CompileResult compileSinglePass(const std::string& displayPath,
     }
 
     res.classCount = (int)cg.getClassInfos().size();
+
+    // ── UNUSED VARIABLE WARNINGS ──────────────────────────────
+    if (!opts.noWarn) {
+        auto unusedWarnings = cg.collectUnusedWarnings();
+        res.warnCount = (int)unusedWarnings.size();
+        if (!unusedWarnings.empty() && verbose) {
+            std::cout << "\n" << YELLOW << BOLD
+                      << "── Unused variable warnings ────────────────────────────\n"
+                      << RESET;
+            for (auto& w : unusedWarnings) {
+                const char* kindStr =
+                    w.kind == SymbolKind::Array     ? "array"     :
+                    w.kind == SymbolKind::Const     ? "const"     :
+                    w.kind == SymbolKind::Pointer   ? "pointer"   :
+                    w.kind == SymbolKind::Parameter ? "parameter" : "variable";
+                std::cout << YELLOW << "  [WARN] " << RESET
+                          << (w.ownerFunction.empty()
+                              ? "<global>" : w.ownerFunction)
+                          << ": " << kindStr << " '"
+                          << w.name << "' declared but never read";
+                if (w.line > 0)
+                    std::cout << " (line " << w.line << ")";
+                std::cout << "\n";
+            }
+            std::cout << "\n";
+        }
+    }
 
     if (verbose) {
         if (!cg.getClassInfos().empty())
@@ -721,7 +832,8 @@ static CompileResult compileSinglePass(const std::string& displayPath,
         cg.optimize(opts.optLevel);
         if (verbose) {
             std::string irAfter = cg.getIRString();
-            printOptReport(cg.getOptStats(), opts.optLevel, irBefore, irAfter, opts.showIrDiff);
+            printOptReport(cg.getOptStats(), opts.optLevel,
+                           irBefore, irAfter, opts.showIrDiff);
         }
     } else if (verbose) {
         std::cout << DIM << "\n  (Optimization disabled: --O0)\n" << RESET;
@@ -733,20 +845,19 @@ static CompileResult compileSinglePass(const std::string& displayPath,
 
     if (verbose && res.irOk) {
         std::cout << "\n--- [LLVM IR"
-                  << (opts.optLevel != OptLevel::O0 ? " (optimized)" : "") << "] ---\n";
+                  << (opts.optLevel != OptLevel::O0 ? " (optimized)" : "")
+                  << (opts.buildArm ? " — AArch64" : " — x86-64")
+                  << "] ---\n";
         cg.dump();
-        std::cout << YELLOW << "\n→ IR written to: " << res.llPath << RESET << "\n";
+        std::cout << YELLOW << "\n→ IR written to: " << res.llPath
+                  << RESET << "\n";
     }
 
     // ── GRAPH / ANALYSIS OUTPUTS ──────────────────────────────
-    // BUG FIX: added showASTStats to the anyGraph check.
-    // Previously, passing only --ast-stats would set showASTStats=true
-    // but anyGraph remained false, so runGraphAnalysis was never called
-    // and no stats appeared.
     bool anyGraph = opts.genCFG        || opts.genCFGAll    ||
                     opts.genCallGraph  || opts.genASTGraph   ||
                     opts.showComplexity|| opts.showDeadCode  ||
-                    opts.showASTStats;   // ← was missing before
+                    opts.showASTStats;
 
     if (anyGraph) {
         if (verbose)
@@ -760,35 +871,58 @@ static CompileResult compileSinglePass(const std::string& displayPath,
 
     // ── BUILD (optional) ──────────────────────────────────────
     if (opts.buildBin && res.irOk) {
-        std::string llcCmd   = "llc -relocation-model=pic "
-                               + res.llPath + " -filetype=obj -o " + objPath + " 2>/dev/null";
-        std::string clangCmd = "clang " + objPath + " -o " + res.binPath + " 2>/dev/null";
+        std::string marchFlag = opts.buildArm ? " -march=aarch64" : "";
+        std::string tripleFlag = opts.buildArm
+            ? " -mtriple=aarch64-linux-gnu" : "";
+        std::string llcCmd = "llc -relocation-model=pic"
+                           + marchFlag + tripleFlag
+                           + " " + res.llPath
+                           + " -filetype=obj -o " + objPath
+                           + " 2>/dev/null";
+        std::string linker = opts.buildArm
+            ? "aarch64-linux-gnu-gcc" : "clang";
+        std::string clangCmd = linker + " " + objPath
+                             + " -o " + res.binPath + " 2>/dev/null";
+
         if (verbose) {
-            std::cout << "\n" << BOLD << "Building...\n" << RESET
+            std::cout << "\n" << BOLD << "Building ("
+                      << (opts.buildArm ? "AArch64" : "x86-64")
+                      << ")...\n" << RESET
                       << "  $ " << llcCmd << "\n";
         }
         bool llcOk   = (std::system(llcCmd.c_str())   == 0);
         if (verbose) std::cout << "  $ " << clangCmd << "\n";
         bool clangOk = llcOk && (std::system(clangCmd.c_str()) == 0);
         res.linkOk = clangOk;
+
         if (res.linkOk) {
             if (verbose)
-                std::cout << GREEN << "→ Executable: " << res.binPath << RESET << "\n\n";
-            int raw = std::system(res.binPath.c_str());
-            res.exitCode = WEXITSTATUS(raw);
-            if (verbose)
-                std::cout << YELLOW << "Exit code: " << res.exitCode << RESET << "\n";
+                std::cout << GREEN << "→ Executable: "
+                          << res.binPath << RESET << "\n\n";
+            // Only run natively if not cross-compiling
+            if (!opts.buildArm) {
+                int raw = std::system(res.binPath.c_str());
+                res.exitCode = WEXITSTATUS(raw);
+                if (verbose)
+                    std::cout << YELLOW << "Exit code: "
+                              << res.exitCode << RESET << "\n";
+            } else if (verbose) {
+                std::cout << DIM
+                          << "  (AArch64 binary — run on ARM hardware or via qemu)\n"
+                          << RESET;
+            }
         } else if (verbose) {
             std::cerr << RED << "[BUILD] llc/clang failed.\n" << RESET;
         }
     } else if (!opts.buildBin && verbose) {
         std::cout << "\n" << BOLD << "Next steps:\n" << RESET
-                  << "  llc "   << res.llPath << " -filetype=obj -o " << objPath << "\n"
-                  << "  clang " << objPath    << " -o " << res.binPath << " -no-pie\n"
+                  << "  llc "   << res.llPath
+                  << " -filetype=obj -o " << objPath << "\n"
+                  << "  clang " << objPath
+                  << " -o " << res.binPath << " -no-pie\n"
                   << "  " << res.binPath << " ; echo $?\n";
     }
 
-    // ── Print generated files ─────────────────────────────────
     if (verbose && (!res.dotFiles.empty() || !res.pngFiles.empty()))
         printGeneratedFiles(res, stem);
 
@@ -814,7 +948,7 @@ static CompileResult compileOne(const std::string& srcPath,
     std::stringstream buf; buf << file.rdbuf();
     std::string source = buf.str();
 
-    // Quick error probe pass (no keepComments, no display)
+    // Quick probe pass (without keepComments, without display)
     Lexer lx1(source, false);
     auto toks1      = lx1.tokenize();
     auto lexErrs1   = lx1.getErrors();
@@ -823,7 +957,9 @@ static CompileResult compileOne(const std::string& srcPath,
     auto parseErrs1 = px1.getErrors();
     std::vector<CodeGenError> cgErrs1;
     if (lexErrs1.empty() && parseErrs1.empty() && ast1) {
-        CodeGen cg1; cg1.generate(ast1.get());
+        CodeGen cg1;
+        if (opts.buildArm) cg1.setTargetTriple("aarch64-linux-gnu");
+        cg1.generate(ast1.get());
         cgErrs1 = cg1.getErrors();
     }
 
@@ -835,7 +971,9 @@ static CompileResult compileOne(const std::string& srcPath,
     if (!opts.autoCorrect) {
         if (verbose) reportErrors(srcPath, lexErrs1, parseErrs1, cgErrs1);
         CompileResult bad;
-        bad.errorCount = (int)lexErrs1.size() + (int)parseErrs1.size() + (int)cgErrs1.size();
+        bad.errorCount = (int)lexErrs1.size()
+                       + (int)parseErrs1.size()
+                       + (int)cgErrs1.size();
         return bad;
     }
 
@@ -855,7 +993,9 @@ static CompileResult compileOne(const std::string& srcPath,
 
     if (verbose) {
         if (fixes.empty()) {
-            std::cout << YELLOW << "  No automatic fixes could be applied.\n" << RESET;
+            std::cout << YELLOW
+                      << "  No automatic fixes could be applied.\n"
+                      << RESET;
         } else {
             std::cout << "\n" << YELLOW << BOLD
                       << "╔══════════════════════════════════════════════════════════╗\n"
@@ -864,12 +1004,15 @@ static CompileResult compileOne(const std::string& srcPath,
                       << RESET << "  " << fixes.size() << " fix(es) applied.\n\n";
             for (size_t i = 0; i < fixes.size(); ++i) {
                 const auto& f = fixes[i];
-                std::cout << CYAN << "  [" << (i+1) << "] [" << f.kind << "] line "
-                          << f.line << " — " << f.description << RESET << "\n";
+                std::cout << CYAN << "  [" << (i+1) << "] ["
+                          << f.kind << "] line " << f.line
+                          << " — " << f.description << RESET << "\n";
                 if (!f.before.empty())
-                    std::cout << "       " << RED   << "- " << f.before << RESET << "\n";
+                    std::cout << "       " << RED
+                              << "- " << f.before << RESET << "\n";
                 if (!f.after.empty())
-                    std::cout << "       " << GREEN << "+ " << f.after  << RESET << "\n";
+                    std::cout << "       " << GREEN
+                              << "+ " << f.after  << RESET << "\n";
             }
         }
     }
@@ -878,16 +1021,20 @@ static CompileResult compileOne(const std::string& srcPath,
     { std::ofstream o(corrPath); if (o) o << corrected; }
 
     if (verbose) {
-        std::cout << "\n" << YELLOW << "  Corrected file: " << corrPath << RESET << "\n";
+        std::cout << "\n" << YELLOW << "  Corrected file: " << corrPath
+                  << RESET << "\n";
         std::cout << "\n" << BLUE << BOLD << "══ CORRECTED SOURCE ══\n" << RESET;
-        std::istringstream crs(corrected); std::string cln; int ln = 1;
+        std::istringstream crs(corrected);
+        std::string cln;
+        int ln = 1;
         while (std::getline(crs, cln)) {
             bool isFix = false;
             for (const auto& f : fixes) if (f.line == ln) { isFix = true; break; }
             std::cout << (isFix ? std::string(GREEN) : std::string(DIM))
                       << std::setw(4) << ln++ << RESET << " │ " << cln << "\n";
         }
-        std::cout << "\n" << BOLD << "══ PASS 2: Compiling corrected source ══\n" << RESET;
+        std::cout << "\n" << BOLD
+                  << "══ PASS 2: Compiling corrected source ══\n" << RESET;
     }
 
     auto r2 = compileSinglePass(corrPath, corrected, outDir,
@@ -929,46 +1076,51 @@ static void runTestSuite(const std::string& testDir,
 
     std::cout << "\n" << BOLD
               << "╔══════════════════════════════════════════════════════════╗\n"
-              << "║       QUAIL COMPILER v4.0  —  BATCH TEST SUITE          ║\n"
+              << "║       QUAIL COMPILER v5.0  —  BATCH TEST SUITE          ║\n"
               << "╚══════════════════════════════════════════════════════════╝\n"
               << RESET
               << "  Test dir : " << testDir  << "\n"
               << "  Out dir  : " << outDir   << "\n"
               << "  Tests    : " << files.size() << "\n"
               << "  Opt      : " << lvl << "\n"
-              << "  AutoFix  : " << (opts.autoCorrect ? "yes" : "no") << "\n"
-              << "  Graphs   : " << ((opts.genCFG||opts.genCFGAll||opts.genCallGraph||opts.genASTGraph) ? "yes" : "no") << "\n\n";
+              << "  Target   : " << (opts.buildArm ? "AArch64" : "x86-64") << "\n"
+              << "  AutoFix  : " << (opts.autoCorrect ? "yes" : "no") << "\n\n";
 
     const int NW = 36, SW = 8;
     std::cout << BOLD << std::left
               << std::setw(NW) << "File"
               << std::setw(SW) << "Parse"
               << std::setw(SW) << "IR"
+              << std::setw(6)  << "Warn"
               << std::setw(6)  << "Cmts"
               << std::setw(6)  << "Cls"
-              << std::setw(6)  << "Dots"
               << std::setw(10) << "Link"
               << std::setw(SW) << "Exit"
               << "IR path\n" << RESET
-              << std::string(NW + SW * 3 + 6 + 6 + 6 + 10 + 30, '-') << "\n";
+              << std::string(NW + SW*3 + 6 + 6 + 6 + 10 + 30, '-') << "\n";
 
     int passed = 0, failed = 0;
     for (auto& srcPath : files) {
         std::string name = fs::path(srcPath).filename().string();
         std::cout << std::left << std::setw(NW) << name << std::flush;
-        CompileResult r = compileOne(srcPath, outDir, /*verbose=*/false, opts);
-        std::cout << (r.parseOk ? std::string(GREEN)+"OK  "+RESET : std::string(RED)+"FAIL"+RESET) << "    ";
-        std::cout << (r.irOk    ? std::string(GREEN)+"OK  "+RESET : std::string(RED)+"FAIL"+RESET) << "    ";
-        std::cout << DIM << std::setw(6) << r.commentCount
-                        << std::setw(6) << r.classCount
-                        << std::setw(6) << r.dotFiles.size() << RESET;
+        CompileResult r = compileOne(srcPath, outDir, false, opts);
+        std::cout << (r.parseOk ? std::string(GREEN)+"OK  "+RESET
+                                : std::string(RED)+"FAIL"+RESET) << "    ";
+        std::cout << (r.irOk    ? std::string(GREEN)+"OK  "+RESET
+                                : std::string(RED)+"FAIL"+RESET) << "    ";
+        std::cout << DIM
+                  << std::setw(6) << r.warnCount
+                  << std::setw(6) << r.commentCount
+                  << std::setw(6) << r.classCount << RESET;
         if (opts.buildBin)
             std::cout << (r.linkOk ? std::string(GREEN)+"linked    "+RESET
                                    : std::string(RED)  +"FAIL      "+RESET);
         else
             std::cout << std::setw(10) << "skipped";
-        if (r.exitCode >= 0) std::cout << YELLOW << std::setw(SW) << r.exitCode << RESET;
-        else                 std::cout << std::setw(SW) << "n/a";
+        if (r.exitCode >= 0)
+            std::cout << YELLOW << std::setw(SW) << r.exitCode << RESET;
+        else
+            std::cout << std::setw(SW) << "n/a";
         if (r.irOk) std::cout << r.llPath;
         if (r.errorCount > 0)
             std::cout << "  " << RED << "(" << r.errorCount << " err)" << RESET;
@@ -976,9 +1128,10 @@ static void runTestSuite(const std::string& testDir,
         if (r.parseOk && r.irOk) ++passed; else ++failed;
     }
 
-    std::cout << std::string(NW + SW * 3 + 6 + 6 + 6 + 10 + 30, '-') << "\n"
+    std::cout << std::string(NW + SW*3 + 6 + 6 + 6 + 10 + 30, '-') << "\n"
               << BOLD << "Results: " << GREEN << passed << " passed" << RESET
-              << "  /  " << (failed ? std::string(RED) : std::string(GREEN))
+              << "  /  "
+              << (failed ? std::string(RED) : std::string(GREEN))
               << failed << " failed" << RESET
               << "  out of " << files.size() << "\n\n";
 }
@@ -1001,6 +1154,10 @@ int main(int argc, char* argv[]) {
         else if (a == "--test-all")       testAll            = true;
         else if (a == "--no-autocorrect") opts.autoCorrect   = false;
         else if (a == "--show-ir-diff")   opts.showIrDiff    = true;
+        else if (a == "--no-warn")        opts.noWarn        = true;
+        // ── Target flags ──────────────────────────────────────
+        else if (a == "--arm")            opts.buildArm      = true;
+        else if (a == "--x86")            opts.buildArm      = false;
         // ── Optimization ──────────────────────────────────────
         else if (a == "--O0")             opts.optLevel      = OptLevel::O0;
         else if (a == "--O1")             opts.optLevel      = OptLevel::O1;
@@ -1016,7 +1173,6 @@ int main(int argc, char* argv[]) {
         else if (a == "--dead-code")      opts.showDeadCode  = true;
         else if (a == "--render")         opts.renderGraphs  = true;
         else if (a == "--graph") {
-            // Convenience: enable all graph + analysis outputs
             opts.genCFG         = true;
             opts.genCFGAll      = true;
             opts.genCallGraph   = true;
@@ -1028,7 +1184,7 @@ int main(int argc, char* argv[]) {
         // ── Paths ─────────────────────────────────────────────
         else if (a == "--testdir" && i+1 < argc) testDir = argv[++i];
         else if (a == "--out"     && i+1 < argc) outDir  = argv[++i];
-        else if (a[0] != '-')             inputFile = a;
+        else if (a[0] != '-')   inputFile = a;
     }
 
     if (testAll) {
@@ -1037,16 +1193,20 @@ int main(int argc, char* argv[]) {
     }
 
     if (inputFile.empty()) {
-        std::cout << BOLD << "Quail Compiler v4.0  (Analysis + OOP + I/O edition)\n\n" << RESET
+        std::cout << BOLD
+                  << "Quail Compiler v5.0  (Full Feature Edition)\n\n" << RESET
                   << "Usage:\n"
                   << "  Single file : ./Quail_Compiler [OPTIONS] <file.mc>\n"
                   << "  All tests   : ./Quail_Compiler --test-all [OPTIONS]\n\n"
                   << "COMPILATION OPTIONS:\n"
                   << "  --debug           Token table + full AST + class registry\n"
                   << "  --build           Compile to native binary and run\n"
+                  << "  --arm             Cross-compile to AArch64 (needs aarch64-linux-gnu-gcc)\n"
+                  << "  --x86             Target x86-64 (default)\n"
                   << "  --O0/O1/O2/O3     Optimization level (default: O2)\n"
-                  << "  --show-ir-diff    Print IR before and after optimization\n"
-                  << "  --no-autocorrect  Disable automatic syntax error correction\n\n"
+                  << "  --show-ir-diff    Print IR before/after optimization\n"
+                  << "  --no-autocorrect  Disable automatic syntax error correction\n"
+                  << "  --no-warn         Suppress unused variable warnings\n\n"
                   << "ANALYSIS & GRAPH OPTIONS:\n"
                   << "  --cfg             Per-function CFG DOT file\n"
                   << "  --cfg-all         All functions in one clustered CFG DOT\n"
@@ -1056,25 +1216,28 @@ int main(int argc, char* argv[]) {
                   << "  --complexity      Cyclomatic complexity per function\n"
                   << "  --dead-code       Unreachable basic-block detection\n"
                   << "  --render          Auto-render DOT → PNG (needs graphviz)\n"
-                  << "  --graph           Enable ALL of the above analysis outputs\n\n"
+                  << "  --graph           Enable ALL analysis outputs\n\n"
                   << "PATH OPTIONS:\n"
                   << "  --testdir <dir>   Test directory (default: test/)\n"
                   << "  --out <dir>       Output directory (default: out/)\n\n"
+                  << "NEW IN v5.0:\n"
+                  << "  const int x = 5;          read-only variables\n"
+                  << "  switch(x){case 1:...}      switch/case/default\n"
+                  << "  int* p = &x; *p = 10;      pointer types\n"
+                  << "  MyClass* obj = new MyClass; heap allocation\n"
+                  << "  delete obj;                heap deallocation\n"
+                  << "  string s = \"hello\";       string type\n"
+                  << "  strlen(s) strcmp(a,b)       string operations\n"
+                  << "  class B extends A {}        single inheritance\n"
+                  << "  super.method()              parent method calls\n"
+                  << "  --arm                       AArch64 cross-compile\n\n"
                   << "EXAMPLES:\n"
-                  << "  # Full analysis with PNG output:\n"
-                  << "  ./Quail_Compiler --graph --render test/30_oop_complex.mc\n\n"
-                  << "  # CFG only, rendered:\n"
-                  << "  ./Quail_Compiler --cfg --render --O2 test/11_recursion_fib.mc\n\n"
-                  << "  # AST stats only:\n"
-                  << "  ./Quail_Compiler --ast-stats test/15_bubble_sort.mc\n\n"
-                  << "  # Complexity report:\n"
-                  << "  ./Quail_Compiler --complexity test/15_bubble_sort.mc\n\n"
-                  << "  # Build + run + all graphs:\n"
-                  << "  ./Quail_Compiler --build --graph --render test/21_class_basic.mc\n\n"
-                  << "GRAPHVIZ:\n"
-                  << "  Install:  sudo apt install graphviz\n"
-                  << "  Manual:   dot -Tpng out/file_cfg_main.dot -o cfg.png\n"
-                  << "            dot -Tsvg out/file_callgraph.dot -o cg.svg\n";
+                  << "  ./Quail_Compiler --graph --render test/30_oop_complex.mc\n"
+                  << "  ./Quail_Compiler --cfg --render --O2 test/11_recursion_fib.mc\n"
+                  << "  ./Quail_Compiler --ast-stats test/15_bubble_sort.mc\n"
+                  << "  ./Quail_Compiler --complexity test/15_bubble_sort.mc\n"
+                  << "  ./Quail_Compiler --build --arm test/21_class_basic.mc\n"
+                  << "  ./Quail_Compiler --build --graph --render test/21_class_basic.mc\n";
         return 1;
     }
 
@@ -1088,23 +1251,27 @@ int main(int argc, char* argv[]) {
     if (displayName.size() > 25) displayName = displayName.substr(0, 23) + "..";
 
     bool anyGraph = opts.genCFG || opts.genCFGAll || opts.genCallGraph ||
-                    opts.genASTGraph || opts.showComplexity || opts.showDeadCode ||
-                    opts.showASTStats;
+                    opts.genASTGraph || opts.showComplexity ||
+                    opts.showDeadCode || opts.showASTStats;
 
     std::cout << "\n" << BOLD
               << "╔══════════════════════════════════════════════════════╗\n"
-              << "║  Quail Compiler v4.0  →  "
+              << "║  Quail Compiler v5.0  →  "
               << std::left << std::setw(27) << displayName << "║\n"
               << "║  Opt: " << lvl
+              << "  │  Target: " << (opts.buildArm ? "AArch64" : "x86-64 ")
               << "  │  AutoFix: " << (opts.autoCorrect ? "ON " : "OFF")
-              << "  │  Graphs: " << (anyGraph ? "ON " : "OFF")
-              << "  │  Render: " << (opts.renderGraphs ? "ON " : "OFF") << " ║\n"
+              << "  │  Graphs: " << (anyGraph ? "ON " : "OFF") << " ║\n"
               << "╚══════════════════════════════════════════════════════╝\n"
               << RESET << "\n";
 
-    CompileResult r = compileOne(inputFile, outDir, /*verbose=*/true, opts);
+    CompileResult r = compileOne(inputFile, outDir, true, opts);
 
     if (r.errorCount > 0 || !r.parseOk || !r.irOk) return 1;
-    std::cout << "\n" << GREEN << BOLD << "Compilation successful.\n" << RESET;
+
+    std::cout << "\n" << GREEN << BOLD << "Compilation successful.";
+    if (r.warnCount > 0)
+        std::cout << "  " << YELLOW << r.warnCount << " warning(s)." << RESET;
+    std::cout << RESET << "\n";
     return 0;
 }

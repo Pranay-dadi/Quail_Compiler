@@ -72,7 +72,7 @@ std::vector<Token> Lexer::tokenize() {
 
         // ── String literals  "..." ────────────────────────────
         if (c == '"') {
-            pos++; // skip opening quote
+            pos++;
             std::string str;
             bool closed = false;
             while (pos < src.size()) {
@@ -113,6 +113,7 @@ std::vector<Token> Lexer::tokenize() {
             if      (id == "int")      tt = TokenType::INT;
             else if (id == "float")    tt = TokenType::FLOAT;
             else if (id == "void")     tt = TokenType::VOID;
+            else if (id == "const")    tt = TokenType::CONST;
             else if (id == "return")   tt = TokenType::RETURN;
             else if (id == "if")       tt = TokenType::IF;
             else if (id == "else")     tt = TokenType::ELSE;
@@ -120,11 +121,19 @@ std::vector<Token> Lexer::tokenize() {
             else if (id == "for")      tt = TokenType::FOR;
             else if (id == "break")    tt = TokenType::BREAK;
             else if (id == "continue") tt = TokenType::CONTINUE;
+            else if (id == "switch")   tt = TokenType::SWITCH;
+            else if (id == "case")     tt = TokenType::CASE;
+            else if (id == "default")  tt = TokenType::DEFAULT;
             else if (id == "class")    tt = TokenType::CLASS;
             else if (id == "new")      tt = TokenType::NEW;
+            else if (id == "delete")   tt = TokenType::DELETE;
             else if (id == "this")     tt = TokenType::THIS;
             else if (id == "public")   tt = TokenType::PUBLIC;
             else if (id == "private")  tt = TokenType::PRIVATE;
+            else if (id == "extends")  tt = TokenType::EXTENDS;
+            else if (id == "super")    tt = TokenType::SUPER;
+            else if (id == "override") tt = TokenType::OVERRIDE;
+            else if (id == "string")   tt = TokenType::STRING_TYPE;
             // ── I/O keywords ──────────────────────────────────
             else if (id == "print")    tt = TokenType::PRINT;
             else if (id == "println")  tt = TokenType::PRINTLN;
@@ -155,7 +164,10 @@ std::vector<Token> Lexer::tokenize() {
                 else { tokens.push_back({TokenType::PLUS, "+", tokLine}); pos++; }
                 continue;
             case '-':
-                tokens.push_back({TokenType::MINUS, "-", tokLine}); pos++; continue;
+                if (peek() == '>') { getChar(); getChar();
+                    tokens.push_back({TokenType::ARROW, "->", tokLine}); }
+                else { tokens.push_back({TokenType::MINUS, "-", tokLine}); pos++; }
+                continue;
             case '*':
                 tokens.push_back({TokenType::MUL, "*", tokLine}); pos++; continue;
             case '/':
@@ -185,13 +197,18 @@ std::vector<Token> Lexer::tokenize() {
             case '&':
                 if (peek() == '&') { getChar(); getChar();
                     tokens.push_back({TokenType::AND, "&&", tokLine}); }
-                else { addError("Unknown character '&' — did you mean '&&'?"); pos++; }
+                else {
+                    // single & = address-of operator
+                    tokens.push_back({TokenType::AMPERSAND, "&", tokLine}); pos++;
+                }
                 continue;
             case '|':
                 if (peek() == '|') { getChar(); getChar();
                     tokens.push_back({TokenType::OR, "||", tokLine}); }
                 else { addError("Unknown character '|' — did you mean '||'?"); pos++; }
                 continue;
+            case ':':
+                tokens.push_back({TokenType::COLON,    ":", tokLine}); pos++; continue;
             case '(': tokens.push_back({TokenType::LPAREN,   "(", tokLine}); pos++; continue;
             case ')': tokens.push_back({TokenType::RPAREN,   ")", tokLine}); pos++; continue;
             case '{': tokens.push_back({TokenType::LBRACE,   "{", tokLine}); pos++; continue;

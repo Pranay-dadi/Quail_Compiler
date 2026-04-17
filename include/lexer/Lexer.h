@@ -21,7 +21,7 @@ private:
     std::string           src;
     size_t                pos;
     int                   line;
-    bool                  keepComments;  // if false, drop comment tokens (compat mode)
+    bool                  keepComments;
     std::vector<LexError> errors;
 
     char getChar();

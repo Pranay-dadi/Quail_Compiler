@@ -15,6 +15,8 @@ file(REMOVE_RECURSE
   "CMakeFiles/Quail_Compiler.dir/src/parser/Parser.cpp.o.d"
   "CMakeFiles/Quail_Compiler.dir/src/semantic/SymbolTable.cpp.o"
   "CMakeFiles/Quail_Compiler.dir/src/semantic/SymbolTable.cpp.o.d"
+  "CMakeFiles/Quail_Compiler.dir/src/semantic/TypeChecker.cpp.o"
+  "CMakeFiles/Quail_Compiler.dir/src/semantic/TypeChecker.cpp.o.d"
   "CMakeFiles/Quail_Compiler.dir/src/utils/Logger.cpp.o"
   "CMakeFiles/Quail_Compiler.dir/src/utils/Logger.cpp.o.d"
   "Quail_Compiler"

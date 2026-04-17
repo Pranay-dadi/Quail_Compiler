@@ -2,39 +2,57 @@
 #include <string>
 
 enum class TokenType {
-    // ── Keywords ─────────────────────────────────────────────
-    INT, FLOAT, RETURN,
+    // ── Core type keywords ────────────────────────────────────
+    INT, FLOAT, VOID, CONST,
+
+    // ── Control flow keywords ─────────────────────────────────
+    RETURN,
     IF, ELSE, WHILE, FOR,
     BREAK, CONTINUE,
+    SWITCH, CASE, DEFAULT,
 
     // ── OOP keywords ──────────────────────────────────────────
     CLASS,      // class
-    NEW,        // new  (reserved for future heap alloc)
+    NEW,        // new  (heap allocation)
+    DELETE,     // delete (heap deallocation)
     THIS,       // this
-    PUBLIC,     // public  (parsed, treated as modifier, no enforcement)
-    PRIVATE,    // private (same)
-    VOID,       // void return type
+    PUBLIC,     // public
+    PRIVATE,    // private
+    EXTENDS,    // extends (inheritance)
+    SUPER,      // super (parent method/field access)
+    OVERRIDE,   // override (method override marker)
+
+    // ── String type ───────────────────────────────────────────
+    STRING_TYPE, // 'string' keyword
 
     // ── I/O keywords ──────────────────────────────────────────
-    PRINT,      // print(expr, ...)   — output without newline
-    PRINTLN,    // println(expr, ...) — output with trailing newline
-    SCAN,       // scan(var, ...)     — read from stdin into variables
+    PRINT,      // print(expr, ...)
+    PRINTLN,    // println(expr, ...)
+    SCAN,       // scan(var, ...)
 
     // ── Literals / identifiers ────────────────────────────────
     IDENT, NUMBER, FLOAT_VAL,
-    STRING_LIT,  // "text" — string literal (usable in print/println)
+    STRING_LIT,  // "text"
 
-    // ── Operators ────────────────────────────────────────────
+    // ── Arithmetic operators ──────────────────────────────────
     PLUS, MINUS, MUL, DIV,
+
+    // ── Assignment / comparison ───────────────────────────────
     ASSIGN, EQ, NEQ, INC,
     LT, GT, LE, GE,
+
+    // ── Logical operators ─────────────────────────────────────
     AND, OR, NOT,
+
+    // ── Pointer / reference operators ────────────────────────
+    AMPERSAND,  // '&'  address-of (unary) / bitwise-and (not used yet)
+    ARROW,      // '->' pointer member access
 
     // ── Punctuation ───────────────────────────────────────────
     LPAREN, RPAREN,
     LBRACE, RBRACE,
     LBRACKET, RBRACKET,
-    SEMI, COMMA,
+    SEMI, COMMA, COLON,
     DOT,        // '.'  member-access operator
 
     // ── Comments (preserved through pipeline) ─────────────────

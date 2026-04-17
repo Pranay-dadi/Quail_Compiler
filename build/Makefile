@@ -360,6 +360,30 @@ src/semantic/SymbolTable.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Quail_Compiler.dir/build.make CMakeFiles/Quail_Compiler.dir/src/semantic/SymbolTable.cpp.s
 .PHONY : src/semantic/SymbolTable.cpp.s
 
+src/semantic/TypeChecker.o: src/semantic/TypeChecker.cpp.o
+.PHONY : src/semantic/TypeChecker.o
+
+# target to build an object file
+src/semantic/TypeChecker.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Quail_Compiler.dir/build.make CMakeFiles/Quail_Compiler.dir/src/semantic/TypeChecker.cpp.o
+.PHONY : src/semantic/TypeChecker.cpp.o
+
+src/semantic/TypeChecker.i: src/semantic/TypeChecker.cpp.i
+.PHONY : src/semantic/TypeChecker.i
+
+# target to preprocess a source file
+src/semantic/TypeChecker.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Quail_Compiler.dir/build.make CMakeFiles/Quail_Compiler.dir/src/semantic/TypeChecker.cpp.i
+.PHONY : src/semantic/TypeChecker.cpp.i
+
+src/semantic/TypeChecker.s: src/semantic/TypeChecker.cpp.s
+.PHONY : src/semantic/TypeChecker.s
+
+# target to generate assembly for a file
+src/semantic/TypeChecker.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Quail_Compiler.dir/build.make CMakeFiles/Quail_Compiler.dir/src/semantic/TypeChecker.cpp.s
+.PHONY : src/semantic/TypeChecker.cpp.s
+
 src/utils/Logger.o: src/utils/Logger.cpp.o
 .PHONY : src/utils/Logger.o
 
@@ -420,6 +444,9 @@ help:
 	@echo "... src/semantic/SymbolTable.o"
 	@echo "... src/semantic/SymbolTable.i"
 	@echo "... src/semantic/SymbolTable.s"
+	@echo "... src/semantic/TypeChecker.o"
+	@echo "... src/semantic/TypeChecker.i"
+	@echo "... src/semantic/TypeChecker.s"
 	@echo "... src/utils/Logger.o"
 	@echo "... src/utils/Logger.i"
 	@echo "... src/utils/Logger.s"

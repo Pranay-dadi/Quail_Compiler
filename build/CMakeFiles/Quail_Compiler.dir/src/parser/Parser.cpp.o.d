@@ -181,4 +181,5 @@ CMakeFiles/Quail_Compiler.dir/src/parser/Parser.cpp.o: \
  /usr/include/c++/11/bits/stl_set.h \
  /usr/include/c++/11/bits/stl_multiset.h \
  /usr/include/c++/11/bits/erase_if.h /usr/include/c++/11/sstream \
- /usr/include/c++/11/bits/sstream.tcc
+ /usr/include/c++/11/bits/sstream.tcc /usr/include/c++/11/cstring \
+ /usr/include/string.h /usr/include/strings.h
