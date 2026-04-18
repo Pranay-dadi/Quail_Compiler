@@ -27,6 +27,12 @@ set(SOURCES
     src/autocorrect/AutoCorrector.cpp
     src/analysis/CFGAnalyzer.cpp
     src/analysis/ASTGrapher.cpp
+    src/ir/IRBuilder.cpp
+    src/ir/IRPipeline.cpp
+    src/ir/IRPrinter.cpp
+    src/optimizer/SSAPass.cpp
+    src/optimizer/OptimizationPasses.cpp
+    src/optimizer/RegisterAllocator.cpp
 )
 
 add_executable(Quail_Compiler ${SOURCES})

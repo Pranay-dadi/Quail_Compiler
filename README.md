@@ -16,7 +16,17 @@ sudo apt-get install zlib1g-dev python3
 # For GraphViz and rendering of graphs
 sudo apt install graphviz
 
+---
 
+## Build
+Inside build folder in root directory
+```bash
+rm -rf *
+cmake ..
+make -j$(nproc)
+```
+
+---
 
 ## Language Features
 
@@ -86,18 +96,6 @@ this.field = expr;  // write a field of the current object
 this.method(args);  // call another method on the same object
 ```
 
----
-
-## Build
-Inside build folder in root directory
-```bash
-rm -rf *
-cmake ..
-make -j$(nproc)
-```
-
----
-
 ## Usage
 
 ### Compile a single file
@@ -141,6 +139,12 @@ make -j$(nproc)
 
 # Full Analysis and PNG output
 ./Quail_Compiler --graph --render test/21_class_basic.mc
+
+# IR Generation
+./Quail_Compiler --ir --ir-ssa --ir-report test/15_bubble_sort.mc
+./Quail_Compiler --ir-all --ir-render test/30_oop_complex.mc
+./Quail_Compiler --ir --ir-regalloc --ir-regs 4 test/11_recursion_fib.mc
+./Quail_Compiler --ir-quads --ir-liveness test/20_complex.mc
 ```
 
 ### Run all tests

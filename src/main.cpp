@@ -12,6 +12,7 @@
 //    • ARM / AArch64 cross-compilation (--arm)
 //    • Single-level inheritance (extends / super)
 //    • Smarter AutoCorrector with typo suggestions
+//    • Native IR pipeline (three-address code, SSA, reg-alloc)
 //
 //  Usage:
 //    ./Quail_Compiler [FLAGS]  <file.mc>
@@ -37,6 +38,7 @@
 #include "autocorrect/AutoCorrector.h"
 #include "analysis/CFGAnalyzer.h"
 #include "analysis/ASTGrapher.h"
+#include "ir/IRIntegration.h"          // ← NEW: Quail native IR pipeline
 
 namespace fs = std::filesystem;
 
@@ -95,6 +97,10 @@ struct CompileOptions {
     bool buildArm       = false;   // true = AArch64 target
     bool noWarn         = false;   // suppress unused-variable warnings
     OptLevel optLevel   = OptLevel::O2;
+
+    // ── NEW: Quail native IR pipeline ────────────────────────
+    IRRunOptions irOpts;
+    bool         runIR  = false;   // master switch: --ir or --ir-all
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -755,6 +761,11 @@ static CompileResult compileSinglePass(const std::string& displayPath,
         }
     }
 
+    // ── IR PIPELINE (three-address code + optimizations) ──────
+    if (opts.runIR && ast) {
+        runIRPipeline(ast.get(), stem, outDir, opts.irOpts, verbose);
+    }
+
     // ── TYPE CHECKER ──────────────────────────────────────────
     TypeChecker typeChecker;
     typeChecker.check(ast.get());
@@ -1181,6 +1192,36 @@ int main(int argc, char* argv[]) {
             opts.showComplexity = true;
             opts.showDeadCode   = true;
         }
+        // ── NEW: Quail native IR pipeline flags ───────────────
+        else if (a == "--ir")          { opts.runIR = true; opts.irOpts.printIR = true; }
+        else if (a == "--ir-quads")    { opts.runIR = true; opts.irOpts.printQuadruples = true; }
+        else if (a == "--ir-ssa")      { opts.runIR = true; opts.irOpts.printSSA = true; }
+        else if (a == "--ir-report")   { opts.runIR = true; opts.irOpts.printReport = true; }
+        else if (a == "--ir-regalloc") { opts.runIR = true; opts.irOpts.printRegAlloc = true; }
+        else if (a == "--ir-stats")    { opts.runIR = true; opts.irOpts.printStats = true; }
+        else if (a == "--ir-cfg")      { opts.runIR = true; opts.irOpts.saveCFGDOT = true; }
+        else if (a == "--ir-dag")      { opts.runIR = true; opts.irOpts.saveDAGDOT = true; }
+        else if (a == "--ir-liveness") { opts.runIR = true; opts.irOpts.showLiveness = true; }
+        else if (a == "--ir-render")   { opts.runIR = true; opts.irOpts.renderDOT = true; }
+        else if (a == "--ir-O0")       { opts.runIR = true; opts.irOpts.pipeOpts = IRPipelineOpts::O0(); }
+        else if (a == "--ir-O1")       { opts.runIR = true; opts.irOpts.pipeOpts = IRPipelineOpts::O1(); }
+        else if (a == "--ir-O2")       { opts.runIR = true; opts.irOpts.pipeOpts = IRPipelineOpts::O2(); }
+        else if (a == "--ir-O3")       { opts.runIR = true; opts.irOpts.pipeOpts = IRPipelineOpts::O3(); }
+        else if (a == "--ir-regs" && i+1 < argc) {
+            opts.runIR = true;
+            opts.irOpts.pipeOpts.numRegisters = std::stoi(argv[++i]);
+        }
+        else if (a == "--ir-all") {
+            opts.runIR                  = true;
+            opts.irOpts.printIR         = true;
+            opts.irOpts.printQuadruples = true;
+            opts.irOpts.printSSA        = true;
+            opts.irOpts.printReport     = true;
+            opts.irOpts.printRegAlloc   = true;
+            opts.irOpts.printStats      = true;
+            opts.irOpts.saveCFGDOT      = true;
+            opts.irOpts.saveDAGDOT      = false; // verbose; opt-in separately
+        }
         // ── Paths ─────────────────────────────────────────────
         else if (a == "--testdir" && i+1 < argc) testDir = argv[++i];
         else if (a == "--out"     && i+1 < argc) outDir  = argv[++i];
@@ -1217,6 +1258,20 @@ int main(int argc, char* argv[]) {
                   << "  --dead-code       Unreachable basic-block detection\n"
                   << "  --render          Auto-render DOT → PNG (needs graphviz)\n"
                   << "  --graph           Enable ALL analysis outputs\n\n"
+                  << "IR PIPELINE OPTIONS (Quail native IR, independent of LLVM):\n"
+                  << "  --ir              Print three-address IR listing\n"
+                  << "  --ir-quads        Print quadruple table (op,arg1,arg2,result)\n"
+                  << "  --ir-ssa          Print SSA form (before optimization)\n"
+                  << "  --ir-report       Print optimization pass statistics\n"
+                  << "  --ir-regalloc     Print register allocation report\n"
+                  << "  --ir-stats        Print IR metrics (blocks, temps, loops)\n"
+                  << "  --ir-cfg          Save IR CFG as DOT files\n"
+                  << "  --ir-dag          Save value DAG as DOT files per block\n"
+                  << "  --ir-liveness     Annotate IR listing with liveIn/liveOut\n"
+                  << "  --ir-render       Render IR DOT files to PNG via graphviz\n"
+                  << "  --ir-O0/O1/O2/O3  IR optimization level (default: O2)\n"
+                  << "  --ir-regs <N>     Number of registers for allocation (default: 8)\n"
+                  << "  --ir-all          Enable all IR outputs\n\n"
                   << "PATH OPTIONS:\n"
                   << "  --testdir <dir>   Test directory (default: test/)\n"
                   << "  --out <dir>       Output directory (default: out/)\n\n"
@@ -1237,7 +1292,13 @@ int main(int argc, char* argv[]) {
                   << "  ./Quail_Compiler --ast-stats test/15_bubble_sort.mc\n"
                   << "  ./Quail_Compiler --complexity test/15_bubble_sort.mc\n"
                   << "  ./Quail_Compiler --build --arm test/21_class_basic.mc\n"
-                  << "  ./Quail_Compiler --build --graph --render test/21_class_basic.mc\n";
+                  << "  ./Quail_Compiler --build --graph --render test/21_class_basic.mc\n"
+                  << "  ./Quail_Compiler --ir test/11_recursion_fib.mc\n"
+                  << "  ./Quail_Compiler --ir --ir-ssa --ir-report test/15_bubble_sort.mc\n"
+                  << "  ./Quail_Compiler --ir-all --ir-render test/30_oop_complex.mc\n"
+                  << "  ./Quail_Compiler --ir --ir-regalloc --ir-regs 4 test/17_gcd.mc\n"
+                  << "  ./Quail_Compiler --ir-quads --ir-liveness test/20_complex.mc\n"
+                  << "  ./Quail_Compiler --test-all --ir --ir-report\n";
         return 1;
     }
 
