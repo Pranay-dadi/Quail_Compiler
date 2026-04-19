@@ -103,6 +103,11 @@ IRModule* IRPipeline::run(AST* ast, const std::string& moduleName) {
         for (auto& fn : module->functions) {
             ssaPass->fromSSA(*fn);
             fn->rebuildEdges();
+            // Full post-fromSSA cleanup: copy-prop first, then dead code, then peephole.
+            { CopyPropagationPass   cp;  cp.run(*fn); }
+            { DeadCodeEliminationPass d1; d1.run(*fn); }
+            { PeepholePass          pp;  pp.run(*fn); }
+            { DeadCodeEliminationPass d2; d2.run(*fn); }
         }
     }
 
@@ -271,8 +276,8 @@ void IRPipeline::printReport() const {
     for (auto& s : passStats) {
         auto& t = totals[s.passName];
         t.passName    = s.passName;
-        t.instrBefore = s.instrBefore;
-        t.instrAfter  = s.instrAfter;
+        if (t.instrBefore == 0) t.instrBefore = s.instrBefore;  // capture first run
+        t.instrAfter = s.instrAfter; 
         t.changed    += s.changed;
         t.removed    += s.removed;
         t.timeMs     += s.timeMs;

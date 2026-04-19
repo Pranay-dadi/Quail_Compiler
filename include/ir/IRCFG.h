@@ -179,16 +179,23 @@ struct IRFunction {
             bb->successors.clear();
             bb->predecessors.clear();
         }
-        for (auto& bb : blocks) {
-            if (auto* term = bb->terminator()) {
+        for (size_t i = 0; i < blocks.size(); ++i) {
+            BasicBlock* bb = blocks[i].get();
+            auto* term = bb->terminator();
+            if (term) {
                 if (term->op == IROp::JUMP)
                     addEdge(bb->label, term->result.name);
                 else if (term->op == IROp::CJUMP) {
                     addEdge(bb->label, term->result.name);
                     addEdge(bb->label, term->arg2.name);
                 } else if (term->op == IROp::CJUMP_TRUE ||
-                           term->op == IROp::CJUMP_FALSE)
+                        term->op == IROp::CJUMP_FALSE)
                     addEdge(bb->label, term->result.name);
+                // RETURN / RETURN_VOID: no outgoing edges (correct)
+            } else if (i + 1 < blocks.size()) {
+                // No terminator = peephole removed a redundant jump.
+                // The block implicitly falls through to the next one.
+                addEdge(bb->label, blocks[i + 1]->label);
             }
         }
     }
@@ -297,6 +304,7 @@ struct IRFunction {
     void detectLoops() {
         loops.clear();
         if (blocks.empty()) return;
+        for (auto& b : blocks) b->loopDepth = 0;
         std::unordered_map<std::string,int> color; // 0=white,1=gray,2=black
         std::function<void(const std::string&)> dfs;
         dfs = [&](const std::string& lbl) {

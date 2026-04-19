@@ -72,6 +72,9 @@ private:
     std::unordered_map<std::string, std::string> assignment; // temp → register name
     std::unordered_set<std::string> spilled;
     Stats stats;
+    std::unordered_map<std::string, std::unordered_map<std::string,std::string>>     fnAssignment; // NEW
+    std::unordered_map<std::string, std::unordered_set<std::string>>                 fnSpilled;    // NEW
+    std::unordered_map<std::string, Stats>               fnStats;      // NEW
 
     // Interference graph: adjacency set per node
     std::unordered_map<std::string, std::unordered_set<std::string>> graph;

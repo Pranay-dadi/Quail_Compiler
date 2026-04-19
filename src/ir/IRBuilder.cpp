@@ -101,7 +101,6 @@ IRValue IRBuilder::genExpr(AST* node) {
         IRValue nv  = newTemp();
         emit(IRInstruction::makeBinop(IROp::ADD, nv, old, IRValue::makeInt(1)));
         emit(IRInstruction::makeAssign(IRValue::makeVar(pi->name), nv));
-        varMap[pi->name] = nv;
         dag.clear();
         return old;
     }
@@ -193,23 +192,23 @@ void IRBuilder::genStmt(AST* node) {
     if (auto* vi = dynamic_cast<VarDeclInitAST*>(node)) {
         IRValue val = genExpr(vi->init.get());
         emit(IRInstruction::makeAssign(IRValue::makeVar(vi->name), val));
-        varMap[vi->name] = val; dag.clear(); return;
+        dag.clear(); return;
     }
     if (auto* cv = dynamic_cast<ConstVarDeclInitAST*>(node)) {
         IRValue val = genExpr(cv->init.get());
         emit(IRInstruction::makeAssign(IRValue::makeVar(cv->name), val));
-        varMap[cv->name] = val; return;
+        return;
     }
     if (auto* vd = dynamic_cast<VarDeclAST*>(node)) {
         IRValue zero = (vd->type == ASTType::Float)
             ? IRValue::makeFloat(0.0) : IRValue::makeInt(0);
         emit(IRInstruction::makeAssign(IRValue::makeVar(vd->name), zero));
-        varMap[vd->name] = zero; return;
+        return;
     }
     if (auto* a = dynamic_cast<AssignAST*>(node)) {
         IRValue val = genExpr(a->expr.get());
         emit(IRInstruction::makeAssign(IRValue::makeVar(a->name), val));
-        varMap[a->name] = val; dag.clear(); return;
+        dag.clear(); return;
     }
     if (auto* aa = dynamic_cast<ArrayAssignAST*>(node)) {
         IRValue idx = genExpr(aa->index.get());
@@ -227,7 +226,7 @@ void IRBuilder::genStmt(AST* node) {
     if (auto* sv = dynamic_cast<StringVarDeclAST*>(node)) {
         IRValue val = sv->init ? genExpr(sv->init.get()) : IRValue::makeVar("\"\"");
         emit(IRInstruction::makeAssign(IRValue::makeVar(sv->name), val));
-        varMap[sv->name] = val; return;
+        return;
     }
     if (auto* ma = dynamic_cast<MemberAssignAST*>(node)) {
         IRValue val = genExpr(ma->expr.get());

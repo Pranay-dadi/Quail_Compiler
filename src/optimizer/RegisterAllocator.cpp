@@ -57,12 +57,13 @@ void RegisterAllocator::addEdge(const std::string& a, const std::string& b) {
 void RegisterAllocator::buildInterferenceGraph(IRFunction& fn) {
     graph.clear();
     const_cast<IRFunction&>(fn).computeLiveness();
+    auto allTemps = collectAllTemps(fn);
 
     for (auto& bb : fn.blocks) {
         // Start with liveOut set
         std::unordered_set<std::string> live;
         for (auto& v : bb->liveOut)
-            if (!v.empty()) live.insert(v);
+            if (!v.empty() && allTemps.count(v)) live.insert(v);
 
         // Walk instructions in reverse
         for (int i = (int)bb->instrs.size() - 1; i >= 0; i--) {
@@ -78,7 +79,7 @@ void RegisterAllocator::buildInterferenceGraph(IRFunction& fn) {
 
             // Uses become live
             auto addLive = [&](const IRValue& v) {
-                if (v.isTemp()) live.insert(v.name);
+                if (v.isTemp() && allTemps.count(v.name)) live.insert(v.name);
             };
             addLive(ins.arg1); addLive(ins.arg2);
             for (auto& ca : ins.callArgs) addLive(ca);
@@ -260,6 +261,9 @@ void RegisterAllocator::allocate(IRFunction& fn) {
         // Re-analyse after spill code insertion
         buildInterferenceGraph(fn);
     }
+    fnAssignment[fn.name] = assignment;
+    fnSpilled[fn.name]    = spilled;
+    fnStats[fn.name]      = stats;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -272,6 +276,9 @@ void RegisterAllocator::printReport(const IRFunction& fn) const {
     static const char* CYAN  = "\033[1;36m";
     static const char* DIM   = "\033[2m";
     static const char* RESET = "\033[0m";
+    const auto& asgn = fnAssignment.count(fn.name) ? fnAssignment.at(fn.name) : assignment;
+    const auto& spll = fnSpilled.count(fn.name) ? fnSpilled.at(fn.name)    : spilled;
+    const Stats& st  = fnStats.count(fn.name) ? fnStats.at(fn.name)      : stats;
 
     std::cout << "\n" << BOLD << CYAN
               << "── Register Allocation: " << fn.name << "() ─────────────\n"
@@ -285,22 +292,22 @@ void RegisterAllocator::printReport(const IRFunction& fn) const {
               << "  IF edges    : " << BOLD << stats.interferenceEdges << RESET << "\n\n";
 
     // Print assignment table
-    if (!assignment.empty()) {
+    if (!asgn.empty()) {
         std::cout << DIM << std::left
                   << std::setw(20) << "  Temporary"
                   << std::setw(10) << "Register" << "\n"
                   << "  " << std::string(28,'-') << "\n" << RESET;
         std::vector<std::pair<std::string,std::string>> sorted(
-            assignment.begin(), assignment.end());
+            asgn.begin(), asgn.end());
         std::sort(sorted.begin(), sorted.end());
         for (auto& [name, reg] : sorted)
             std::cout << "  " << std::left << std::setw(20) << name
                       << GREEN << reg << RESET << "\n";
     }
 
-    if (!spilled.empty()) {
+    if (!spll.empty()) {
         std::cout << "\n" << RED << "  Spilled temporaries:\n" << RESET;
-        for (auto& s : spilled)
+        for (auto& s : spll)
             std::cout << "    " << s << " → stack slot\n";
     }
     std::cout << "\n";

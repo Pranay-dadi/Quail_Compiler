@@ -40,7 +40,7 @@ SSAPass::computeDomFrontier(IRFunction& fn) {
 std::unordered_set<std::string> SSAPass::collectDefs(IRFunction& fn) {
     std::unordered_set<std::string> defs;
     fn.forEachInstruction([&](const BasicBlock&, const IRInstruction& ins) {
-        if (ins.definesValue() && ins.result.isTempOrVar())
+        if (ins.definesValue() && ins.result.isVar())
             defs.insert(ins.result.name);
     });
     return defs;
@@ -133,20 +133,20 @@ void SSAPass::renameBlock(
         // Rename uses (except phi sources — handled at successor boundary)
         if (ins.op != IROp::PHI) {
             // arg1
-            if (ins.arg1.isTempOrVar() && stacks.count(ins.arg1.name) &&
+            if (ins.arg1.isVar() && stacks.count(ins.arg1.name) &&
                 !stacks[ins.arg1.name].empty()) {
                 ins.arg1.name = stacks[ins.arg1.name].top();
                 stats.renames++;
             }
             // arg2
-            if (ins.arg2.isTempOrVar() && stacks.count(ins.arg2.name) &&
+            if (ins.arg2.isVar() && stacks.count(ins.arg2.name) &&
                 !stacks[ins.arg2.name].empty()) {
                 ins.arg2.name = stacks[ins.arg2.name].top();
                 stats.renames++;
             }
             // callArgs
             for (auto& ca : ins.callArgs) {
-                if (ca.isTempOrVar() && stacks.count(ca.name) &&
+                if (ca.isVar() && stacks.count(ca.name) &&
                     !stacks[ca.name].empty()) {
                     ca.name = stacks[ca.name].top();
                     stats.renames++;
@@ -155,7 +155,7 @@ void SSAPass::renameBlock(
         }
 
         // Rename definition
-        if (ins.definesValue() && ins.result.isTempOrVar()) {
+        if (ins.definesValue() && ins.result.isVar()) {
             std::string base = ins.result.name;
             if (!counters.count(base)) counters[base] = 0;
             int ver = counters[base]++;
@@ -177,7 +177,7 @@ void SSAPass::renameBlock(
             // Find and update the source for this predecessor
             for (auto& [predLbl, val] : phi.phiSources) {
                 if (predLbl == bb.label) {
-                    if (val.isTempOrVar() && stacks.count(val.name) &&
+                    if (val.isVar() && stacks.count(val.name) &&
                         !stacks[val.name].empty()) {
                         val.name = stacks[val.name].top();
                     }
@@ -206,7 +206,7 @@ void SSAPass::rename(IRFunction& fn) {
 
     // Initialize stacks for all defined variables
     fn.forEachInstruction([&](const BasicBlock&, const IRInstruction& ins) {
-        if (ins.definesValue() && ins.result.isTempOrVar())
+        if (ins.definesValue() && ins.result.isVar())
             if (!stacks.count(ins.result.name))
                 stacks[ins.result.name] = {};
     });
@@ -215,7 +215,7 @@ void SSAPass::rename(IRFunction& fn) {
         for (auto& ins : bb->instrs)
             if (ins.op == IROp::PHI)
                 for (auto& [lbl, val] : ins.phiSources)
-                    if (val.isTempOrVar() && !stacks.count(val.name))
+                    if (val.isVar() && !stacks.count(val.name))
                         stacks[val.name] = {};
 
     if (!fn.blocks.empty())
